@@ -32,6 +32,22 @@
   </div>
 
   <div id="app" class="versteckt">
+    <div class="post">
+  <div id="countdown" style="font-size:22px;font-weight:600;text-align:center">Noch kein Treffen geplant</div>
+  <div id="besuchInfo" class="meta" style="text-align:center"></div>
+  <details>
+    <summary class="meta">Nächstes Treffen eintragen</summary>
+    <select id="reisender" style="width:100%;padding:10px;font-size:16px;margin:6px 0">
+      <option>Laura fährt nach München</option>
+      <option>Dani fährt nach Düsseldorf</option>
+    </select>
+    <div class="meta">Ankunft</div>
+    <input id="ankunft" type="datetime-local">
+    <div class="meta">Abreise</div>
+    <input id="abreise" type="date">
+    <button onclick="besuchSpeichern()" style="margin-top:8px">Speichern</button>
+  </details>
+</div>
     <label><button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button></label>
     <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
     <button onclick="pushAktivieren()">🔔 Benachrichtigungen aktivieren</button>
@@ -66,6 +82,7 @@ function zeigeApp() {
   document.getElementById("login").classList.add("versteckt");
   document.getElementById("app").classList.remove("versteckt");
   ladeFeed();
+  ladeBesuch();
 }
 
 async function hochladen(datei) {
@@ -179,7 +196,50 @@ async function pushAktivieren() {
   alert("Benachrichtigungen sind aktiv! 🔔");
 }
 
-window.addEventListener("error", e => alert("Fehler: " + e.message));
+let naechsterBesuch = null;
+
+async function ladeBesuch() {
+  const { data } = await db.from("besuche").select("*")
+    .gte("ankunft", new Date(Date.now() - 30 * 864e5).toISOString())
+    .order("ankunft");
+  const jetzt = new Date();
+  naechsterBesuch = (data || []).find(b =>
+    new Date(b.ankunft) > jetzt || (b.abreise && new Date(b.abreise + "T23:59") >= jetzt)) || null;
+  zeigeCountdown();
+}
+
+function zeigeCountdown() {
+  const el = document.getElementById("countdown");
+  const info = document.getElementById("besuchInfo");
+  if (!naechsterBesuch) { el.textContent = "Noch kein Treffen geplant"; info.textContent = ""; return; }
+  const ankunft = new Date(naechsterBesuch.ankunft);
+  const diff = ankunft - new Date();
+  if (diff <= 0) {
+    el.textContent = "Ihr seid zusammen 💕";
+  } else {
+    const t = Math.floor(diff / 864e5), h = Math.floor(diff / 36e5) % 24, m = Math.floor(diff / 6e4) % 60;
+    el.textContent = `Noch ${t} T · ${h} Std · ${m} Min 💕`;
+  }
+  info.textContent = naechsterBesuch.reisender + " · Ankunft " +
+    ankunft.toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) +
+    (naechsterBesuch.abreise ? " · bis " + new Date(naechsterBesuch.abreise).toLocaleDateString("de-DE") : "");
+}
+
+async function besuchSpeichern() {
+  const ankunft = document.getElementById("ankunft").value;
+  if (!ankunft) return alert("Bitte die Ankunft eintragen.");
+  const { error } = await db.from("besuche").insert({
+    reisender: document.getElementById("reisender").value,
+    ankunft: new Date(ankunft).toISOString(),
+    abreise: document.getElementById("abreise").value || null
+  });
+  if (error) return alert("Fehler: " + error.message);
+  alert("Gespeichert! 💕");
+  ladeBesuch();
+}
+
+setInterval(zeigeCountdown, 60000);
+  window.addEventListener("error", e => alert("Fehler: " + e.message));
 window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
   start();
 </script>
