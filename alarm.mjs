@@ -123,6 +123,58 @@ async function ticketErinnerung(jetzt, leute) {
   await merken(schluessel);
 }
 
+// 4) Food-Diary-Erinnerung (13–21 Uhr, wenn man heute noch nichts gepostet hat)
+async function essenErinnerung(jetzt, leute) {
+  if (jetzt.minuten < 13 * 60 || jetzt.minuten >= 21 * 60) return;
+  const seit = new Date(Date.now() - 20 * 36e5).toISOString();
+  const { data } = await db.from("essen").select("user_id, erstellt_um").gte("erstellt_um", seit);
+  const gepostet = new Set((data || []).filter(x => berlin(new Date(x.erstellt_um)).tag === jetzt.tag).map(x => x.user_id));
+  for (const p of leute) {
+    if (gepostet.has(p.user_id)) continue;
+    const schluessel = `essen-${jetzt.tag}-${p.name}`;
+    if (await schonGesendet(schluessel)) continue;
+    await senden({ title: "🍽️ Was gab's heute?", body: "Mach ein Foto von deinem Essen fürs Food Diary!" }, [p.user_id]);
+    await merken(schluessel);
+  }
+}
+
+// 5) Gefühls-Check-in (sonntags 18–21 Uhr)
+async function checkinErinnerung(jetzt, leute) {
+  const wochentag = new Date(jetzt.tag + "T12:00:00Z").getUTCDay();
+  if (wochentag !== 0 || jetzt.minuten < 18 * 60 || jetzt.minuten >= 21 * 60) return;
+  const schluessel = "checkin-" + jetzt.tag;
+  if (await schonGesendet(schluessel)) return;
+  const seit = new Date(Date.now() - 6 * 864e5).toISOString();
+  const { data } = await db.from("checkins").select("user_id").gte("erstellt_um", seit);
+  const schonDa = new Set((data || []).map(x => x.user_id));
+  const offen = leute.filter(p => !schonDa.has(p.user_id)).map(p => p.user_id);
+  if (offen.length) await senden({ title: "💗 Wie geht's dir mit uns?", body: "Nimm dir kurz Zeit für euren wöchentlichen Check-in." }, offen);
+  await merken(schluessel);
+}
+
+// 6) Monatsrückblick (am 1. des Monats ab 10 Uhr)
+async function rueckblickErinnerung(jetzt) {
+  if (!jetzt.tag.endsWith("-01") || jetzt.minuten < 10 * 60) return;
+  const schluessel = "rueckblick-" + jetzt.tag;
+  if (await schonGesendet(schluessel)) return;
+  const vormonat = new Date(jetzt.tag + "T12:00:00Z");
+  vormonat.setUTCDate(0);
+  const monat = vormonat.toLocaleDateString("de-DE", { month: "long", timeZone: "UTC" });
+  await senden({ title: "📅 Euer Monatsrückblick", body: `Schaut euch an, was ihr im ${monat} zusammen erlebt habt 💕` });
+  await merken(schluessel);
+}
+
+// 7) To-dos am Fälligkeitstag (ab 9 Uhr)
+async function todoErinnerung(jetzt) {
+  if (jetzt.minuten < 9 * 60) return;
+  const { data } = await db.from("liste").select("*").eq("art", "todo").eq("erledigt", false).eq("faellig", jetzt.tag);
+  for (const t of data || []) {
+    const schluessel = "todo-" + t.id;
+    if (await schonGesendet(schluessel)) continue;
+    await senden({ title: "✅ Heute fällig", body: t.text });
+    await merken(schluessel);
+  }
+}
 const test = process.env.TEST === "true";
 const jetzt = berlin(new Date());
 const { data: leute, error: personenFehler } = await db.from("personen").select("user_id, name");
@@ -132,3 +184,7 @@ await fotoAlarm(jetzt, test);
 await abholErinnerung(jetzt, leute);
 await ticketErinnerung(jetzt, leute);
 await notizenVerschicken(leute);
+await essenErinnerung(jetzt, leute);
+await checkinErinnerung(jetzt, leute);
+await rueckblickErinnerung(jetzt);
+await todoErinnerung(jetzt);
