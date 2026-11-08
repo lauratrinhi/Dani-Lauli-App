@@ -132,7 +132,7 @@
 
   function gefuehlKnoepfe() {
     document.getElementById("exGefuehlKnoepfe").innerHTML = GEFUEHLE.map((g, i) =>
-      `<button onclick="exGefuehlWahl(${i + 1})" style="width:auto;font-size:28px;padding:6px 10px;background:${gewaehlt === i + 1 ? "#e8707e" : "#f3f3f3"}">${g}</button>`
+      `<button onclick="exGefuehlWahl(${i + 1})" style="width:auto;font-size:28px;padding:6px 10px;background:${gewaehlt === i + 1 ? "#1f3a68" : "#f3f3f3"}">${g}</button>`
     ).join("");
   }
 
@@ -217,7 +217,7 @@
   function zeige(id) {
     document.querySelectorAll("[data-tab]").forEach(b => {
       const aktiv = b.dataset.tab === id;
-      b.style.background = aktiv ? "#e8707e" : "#f3f3f3";
+      b.style.background = aktiv ? "#1f3a68" : "#f3f3f3";
       b.style.color = aktiv ? "white" : "#333";
     });
     document.querySelectorAll(".ex-bereich").forEach(d => { d.style.display = d.id === "tab-" + id ? "" : "none"; });
@@ -244,7 +244,7 @@
       ["rueckblick", "📅", "Rückblick", el(RUECKBLICK_HTML)]
     ];
 
-    const nav = el(`<div style="display:flex;gap:6px;margin-bottom:12px;position:sticky;top:0;background:#fff7f5;padding:6px 0;z-index:5"></div>`);
+    const nav = el(`<div style="display:flex;gap:6px;margin-bottom:12px;position:sticky;top:0;background:#f4f6fb;padding:6px 0;z-index:5"></div>`);
     app.appendChild(nav);
     reiter.forEach(([id, symbol, text, bereich]) => {
       const knopf = el(`<button style="flex:1;padding:6px 0;font-size:20px;line-height:1.1">${symbol}<div style="font-size:11px">${text}</div></button>`);
