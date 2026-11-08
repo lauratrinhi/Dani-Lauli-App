@@ -196,33 +196,38 @@ async function pushAktivieren() {
   alert("Benachrichtigungen sind aktiv! 🔔");
 }
 
-let naechsterBesuch = null;
+let besuche = [];
 
 async function ladeBesuch() {
   const { data } = await db.from("besuche").select("*")
-    .gte("ankunft", new Date(Date.now() - 30 * 864e5).toISOString())
+    .gte("ankunft", new Date(Date.now() - 60 * 864e5).toISOString())
     .order("ankunft");
   const jetzt = new Date();
-  naechsterBesuch = (data || []).find(b =>
-    new Date(b.ankunft) > jetzt || (b.abreise && new Date(b.abreise + "T23:59") >= jetzt)) || null;
+  besuche = (data || []).filter(b =>
+    new Date(b.ankunft) > jetzt || (b.abreise && new Date(b.abreise + "T23:59") >= jetzt));
   zeigeCountdown();
+}
+
+function restZeit(datum) {
+  const diff = new Date(datum) - new Date();
+  if (diff <= 0) return "Ihr seid zusammen 💕";
+  const t = Math.floor(diff / 864e5), h = Math.floor(diff / 36e5) % 24, m = Math.floor(diff / 6e4) % 60;
+  return `Noch ${t} T · ${h} Std · ${m} Min 💕`;
 }
 
 function zeigeCountdown() {
   const el = document.getElementById("countdown");
   const info = document.getElementById("besuchInfo");
-  if (!naechsterBesuch) { el.textContent = "Noch kein Treffen geplant"; info.textContent = ""; return; }
-  const ankunft = new Date(naechsterBesuch.ankunft);
-  const diff = ankunft - new Date();
-  if (diff <= 0) {
-    el.textContent = "Ihr seid zusammen 💕";
-  } else {
-    const t = Math.floor(diff / 864e5), h = Math.floor(diff / 36e5) % 24, m = Math.floor(diff / 6e4) % 60;
-    el.textContent = `Noch ${t} T · ${h} Std · ${m} Min 💕`;
-  }
-  info.textContent = naechsterBesuch.reisender + " · Ankunft " +
-    ankunft.toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) +
-    (naechsterBesuch.abreise ? " · bis " + new Date(naechsterBesuch.abreise).toLocaleDateString("de-DE") : "");
+  if (!besuche.length) { el.textContent = "Noch kein Treffen geplant"; info.innerHTML = ""; return; }
+  el.textContent = restZeit(besuche[0].ankunft);
+  info.innerHTML = besuche.map(b => {
+    const ankunft = new Date(b.ankunft).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+    const bis = b.abreise ? " · bis " + new Date(b.abreise).toLocaleDateString("de-DE") : "";
+    return `<div style="display:flex;align-items:center;gap:8px;margin:8px 0;text-align:left">
+      <div style="flex:1">${schuetzen(b.reisender)}<br>Ankunft ${ankunft}${bis}<br><b>${restZeit(b.ankunft)}</b></div>
+      <button onclick="besuchLoeschen(${b.id})" style="width:auto;background:#f3f3f3;color:#333">🗑️</button>
+    </div>`;
+  }).join("");
 }
 
 async function besuchSpeichern() {
@@ -234,7 +239,15 @@ async function besuchSpeichern() {
     abreise: document.getElementById("abreise").value || null
   });
   if (error) return alert("Fehler: " + error.message);
-  alert("Gespeichert! 💕");
+  document.getElementById("ankunft").value = "";
+  document.getElementById("abreise").value = "";
+  ladeBesuch();
+}
+
+async function besuchLoeschen(id) {
+  if (!confirm("Diesen Termin wirklich löschen?")) return;
+  const { error } = await db.from("besuche").delete().eq("id", id);
+  if (error) return alert("Fehler: " + error.message);
   ladeBesuch();
 }
 
