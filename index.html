@@ -148,8 +148,40 @@ async function kommentieren(postId) {
 function schuetzen(t) {
   return t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+  const VAPID_PUBLIC = "BN9ZIOLWc1yuuTJW3ZZE1F3Mxl8ZuYyQhfcdg8rliLdmtgNNVLopFWgZzEaK9d7UBRmrnAWd3TK1DwoGHVF2WCo";
 
-start();
+function base64ZuBytes(s) {
+  const rest = "=".repeat((4 - s.length % 4) % 4);
+  const roh = atob((s + rest).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from([...roh].map(c => c.charCodeAt(0)));
+}
+
+async function pushAktivieren() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return alert("Bitte öffne die App über das Symbol auf dem Home-Bildschirm.");
+  }
+  const erlaubnis = await Notification.requestPermission();
+  if (erlaubnis !== "granted") return alert("Benachrichtigungen wurden nicht erlaubt.");
+  const reg = await navigator.serviceWorker.register("sw.js");
+  await navigator.serviceWorker.ready;
+  let abo = await reg.pushManager.getSubscription();
+  if (!abo) {
+    abo = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64ZuBytes(VAPID_PUBLIC)
+    });
+  }
+  const { error } = await db.from("push_abos").upsert(
+    { abo: abo.toJSON() },
+    { onConflict: "user_id,abo", ignoreDuplicates: true }
+  );
+  if (error) return alert("Fehler: " + error.message);
+  alert("Benachrichtigungen sind aktiv! 🔔");
+}
+
+window.addEventListener("error", e => alert("Fehler: " + e.message));
+window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
+  start();
 </script>
 </body>
 </html>
