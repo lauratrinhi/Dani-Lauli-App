@@ -1,4 +1,5 @@
-import webpush from "web-push";
+import * as webpushModul from "web-push";
+const webpush = webpushModul.default ?? webpushModul;
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 
