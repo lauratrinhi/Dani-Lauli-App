@@ -340,6 +340,7 @@ async function pushUmschalten() {
 }
   const GIPHY_KEY = "kEmWwXsKqsGfZMIqsEQY7vP3YVqCcXLQ";
 let gifPost = null;
+  let gifArt = "gifs";
 
 function gifFenster() {
   let f = document.getElementById("gifFenster");
@@ -352,6 +353,10 @@ function gifFenster() {
       <div style="display:flex;gap:6px">
         <input id="gifSuche" placeholder="GIF suchen …" style="flex:1">
         <button onclick="gifSchliessen()" style="width:auto;background:#f3f3f3;color:#333">✕</button>
+      </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+        <button id="artGifs" onclick="gifArtWechseln('gifs')" style="flex:1">GIFs</button>
+        <button id="artStickers" onclick="gifArtWechseln('stickers')" style="flex:1;background:#f3f3f3;color:#333">Sticker</button>
       </div>
       <div id="gifErgebnisse" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;overflow-y:auto;margin-top:8px;flex:1;align-content:start"></div>
       <div class="meta" style="text-align:center">Powered by GIPHY</div>
@@ -366,8 +371,8 @@ function gifFenster() {
 async function gifLaden(suche) {
   const box = document.getElementById("gifErgebnisse");
   const url = suche.trim()
-    ? `https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(suche)}&limit=24&rating=pg-13&lang=de`
-    : `https://api.giphy.com/v1/gifs/trending?api_key=${GIPHY_KEY}&limit=24&rating=pg-13`;
+    ? `https://api.giphy.com/v1/${gifArt}/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(suche)}&limit=24&rating=pg-13&lang=de`
+    : `https://api.giphy.com/v1/${gifArt}/trending?api_key=${GIPHY_KEY}&limit=24&rating=pg-13`;
   try {
     const antwort = await fetch(url);
     const { data } = await antwort.json();
@@ -388,7 +393,13 @@ function gifSuchen(postId) {
   gifLaden("");
 }
 
-function gifSchliessen() {
+function gifArtWechseln(art) {
+  gifArt = art;
+  document.getElementById("artGifs").style.cssText = art === "gifs" ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
+  document.getElementById("artStickers").style.cssText = art === "stickers" ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
+  gifLaden(document.getElementById("gifSuche").value);
+}
+  function gifSchliessen() {
   document.getElementById("gifFenster").style.display = "none";
 }
 
