@@ -49,11 +49,11 @@
       return;
     }
     const personKnopf = ([id, n]) =>
-      `<button onclick="abcPlaner('${id}')" style="flex:1;background:${planer === id ? "#e8707e" : "#f3f3f3"};color:${planer === id ? "white" : "#333"}">${esc(n)}</button>`;
+      `<button onclick="abcPlaner('${id}')" style="flex:1;background:${planer === id ? "#1f3a68" : "#f3f3f3"};color:${planer === id ? "white" : "#333"}">${esc(n)}</button>`;
     box.innerHTML = `
       <div style="text-align:center">
         <div class="meta">Als Nächstes dran</div>
-        <div style="font-size:56px;font-weight:800;color:#e8707e;line-height:1.1">${aktuell}</div>
+        <div style="font-size:56px;font-weight:800;color:#1f3a68;line-height:1.1">${aktuell}</div>
       </div>
       <div class="meta" style="margin-top:8px">Wer plant das ${aktuell}-Date?</div>
       <div style="display:flex;gap:6px;margin:4px 0 8px">${Object.entries(namen).map(personKnopf).join("")}</div>
@@ -66,9 +66,9 @@
     const { fertigSet, aktuell } = stand();
     document.getElementById("abcRaster").innerHTML = ABC.map(b => {
       const fertig = fertigSet.has(b);
-      const hg = fertig ? "#e8707e" : b === aktuell ? "#fff" : "#f3f3f3";
+      const hg = fertig ? "#1f3a68" : b === aktuell ? "#fff" : "#f3f3f3";
       const farbe = fertig ? "white" : "#333";
-      const rand = b === offen ? "2px solid #333" : b === aktuell ? "2px solid #e8707e" : "none";
+      const rand = b === offen ? "2px solid #333" : b === aktuell ? "2px solid #1f3a68" : "none";
       return `<button onclick="abcOeffnen('${b}')" style="width:auto;padding:8px 0;font-size:18px;background:${hg};color:${farbe};border:${rand}">${b}${anzahl[b] ? `<div style="font-size:10px">${anzahl[b]}×</div>` : ""}</button>`;
     }).join("");
   }
@@ -121,7 +121,7 @@
     ).join("");
     box.innerHTML = `
       <div class="post">
-        <div style="font-size:28px;font-weight:800;color:#e8707e">${b}</div>
+        <div style="font-size:28px;font-weight:800;color:#1f3a68">${b}</div>
         ${(eintraege || []).map(e => `
           <div style="margin:12px 0;border-top:1px solid #eee;padding-top:10px">
             <div style="display:flex;align-items:center;gap:8px">
@@ -180,7 +180,7 @@
   function aktivieren() {
     document.querySelectorAll("[data-tab]").forEach(b => {
       const aktiv = b.dataset.tab === "abc";
-      b.style.background = aktiv ? "#e8707e" : "#f3f3f3";
+      b.style.background = aktiv ? "#1f3a68" : "#f3f3f3";
       b.style.color = aktiv ? "white" : "#333";
     });
     document.querySelectorAll(".ex-bereich").forEach(d => { d.style.display = d.id === "tab-abc" ? "" : "none"; });
