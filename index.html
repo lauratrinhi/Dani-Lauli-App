@@ -48,6 +48,13 @@
     <button onclick="besuchSpeichern()" style="margin-top:8px">Speichern</button>
   </details>
 </div>
+    
+    <div class="post">
+  <div style="font-weight:600;margin-bottom:6px">📝 Erinnerungen</div>
+  <div id="notizenListe"></div>
+  <textarea id="notizText" rows="2" placeholder="Woran soll ich dich erinnern?"></textarea>
+  <button onclick="notizSenden()" style="margin-top:6px">Erinnerung schicken</button>
+</div>
     <label><button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button></label>
     <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
     <button onclick="pushAktivieren()">🔔 Benachrichtigungen aktivieren</button>
@@ -83,6 +90,7 @@ function zeigeApp() {
   document.getElementById("app").classList.remove("versteckt");
   ladeFeed();
   ladeBesuch();
+  ladeNotizen();
 }
 
 async function hochladen(datei) {
@@ -252,6 +260,45 @@ async function besuchLoeschen(id) {
 }
 
 setInterval(zeigeCountdown, 60000);
+  let leute = [];
+
+async function ladeNotizen() {
+  if (!leute.length) {
+    const { data } = await db.from("personen").select("user_id, name");
+    leute = data || [];
+  }
+  const name = id => (leute.find(p => p.user_id === id) || {}).name || "?";
+  const { data } = await db.from("notizen").select("*").eq("erledigt", false).order("erstellt_um");
+  const offen = data || [];
+  document.getElementById("notizenListe").innerHTML = offen.map(n => `
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+      <div style="flex:1" class="kommentar">${n.an === ich.id ? "💌 Von " + schuetzen(name(n.von)) : "📤 An " + schuetzen(name(n.an))}: ${schuetzen(n.text)}</div>
+      <button onclick="notizErledigt(${n.id})" style="width:auto;background:#f3f3f3;color:#333">${n.an === ich.id ? "✅" : "🗑️"}</button>
+    </div>`).join("") || '<div class="meta">Keine offenen Erinnerungen</div>';
+  const fuerMich = offen.filter(n => n.an === ich.id).length;
+  if (navigator.setAppBadge) fuerMich ? navigator.setAppBadge(fuerMich) : navigator.clearAppBadge();
+}
+
+async function notizSenden() {
+  const feld = document.getElementById("notizText");
+  const text = feld.value.trim();
+  if (!text) return;
+  const anderer = leute.find(p => p.user_id !== ich.id);
+  if (!anderer) return alert("Die andere Person wurde nicht gefunden.");
+  const { error } = await db.from("notizen").insert({ an: anderer.user_id, text });
+  if (error) return alert("Fehler: " + error.message);
+  feld.value = "";
+  ladeNotizen();
+}
+
+async function notizErledigt(id) {
+  await db.from("notizen").update({ erledigt: true }).eq("id", id);
+  ladeNotizen();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && ich) ladeNotizen();
+});
   window.addEventListener("error", e => alert("Fehler: " + e.message));
 window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
   start();
