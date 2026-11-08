@@ -1,10 +1,10 @@
 self.addEventListener("push", (event) => {
   const daten = event.data ? event.data.json() : {};
-  event.waitUntil(
-    self.registration.showNotification(daten.title || "Wir zwei 💕", {
-      body: daten.body || "Zeit für ein Foto! Du hast 2 Minuten 📸"
-    })
-  );
+  const aufgaben = [
+    self.registration.showNotification(daten.title || "Wir zwei 💕", { body: daten.body || "" })
+  ];
+  if (daten.badge && self.navigator.setAppBadge) aufgaben.push(self.navigator.setAppBadge(daten.badge));
+  event.waitUntil(Promise.all(aufgaben));
 });
 
 self.addEventListener("notificationclick", (event) => {
