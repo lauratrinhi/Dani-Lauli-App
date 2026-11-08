@@ -57,6 +57,17 @@ async function merken(schluessel) {
   await db.from("erinnerungen").upsert({ schluessel, gesendet_um: new Date().toISOString() });
 }
 
+// 0) Neue Erinnerungen verschicken
+async function notizenVerschicken(leute) {
+  const { data: neue } = await db.from("notizen").select("*").eq("gesendet", false).eq("erledigt", false);
+  for (const n of neue || []) {
+    const von = (leute.find(p => p.user_id === n.von) || {}).name || "Jemand";
+    const { count } = await db.from("notizen").select("id", { count: "exact", head: true })
+      .eq("an", n.an).eq("erledigt", false);
+    await senden({ title: `📝 Erinnerung von ${von}`, body: n.text, badge: count }, [n.an]);
+    await db.from("notizen").update({ gesendet: true }).eq("id", n.id);
+  }
+}
 // 1) Täglicher Foto-Alarm
 async function fotoAlarm(jetzt, test) {
   if (test) return senden({ title: "Test 🔔", body: "Der Wecker funktioniert! 🎉" });
@@ -120,3 +131,4 @@ if (personenFehler) throw personenFehler;
 await fotoAlarm(jetzt, test);
 await abholErinnerung(jetzt, leute);
 await ticketErinnerung(jetzt, leute);
+await notizenVerschicken(leute);
