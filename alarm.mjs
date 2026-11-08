@@ -1,9 +1,11 @@
 import * as webpushModul from "web-push";
-const webpush = webpushModul.default ?? webpushModul;
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 
-const START = 9 * 60, ENDE = 21 * 60; // Zeitraum: 9 bis 21 Uhr
+const webpush = webpushModul.default ?? webpushModul;
+
+const START = 9 * 60, ENDE = 21 * 60; // Foto-Alarm zwischen 9 und 21 Uhr
+const ABHOL_STUNDE = 8;               // Abhol-Erinnerung ab 8 Uhr morgens
 
 const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 webpush.setVapidDetails(
@@ -26,33 +28,95 @@ function zielMinuten(tag) {
   return START + (zahl % (ENDE - START));
 }
 
-const test = process.env.TEST === "true";
-const jetzt = berlin(new Date());
+const vorname = text => text.trim().split(" ")[0];
 
-if (!test) {
-  if (jetzt.minuten < zielMinuten(jetzt.tag)) { console.log("Noch nicht Zeit."); process.exit(0); }
+async function senden(nachricht, userIds = null) {
+  let abfrage = db.from("push_abos").select("id, abo");
+  if (userIds) abfrage = abfrage.in("user_id", userIds);
+  const { data: abos, error } = await abfrage;
+  if (error) throw error;
+  for (const { id, abo } of abos) {
+    try {
+      await webpush.sendNotification(abo, JSON.stringify(nachricht), { TTL: 3600, urgency: "high" });
+      console.log("Gesendet an", id, nachricht.title);
+    } catch (e) {
+      console.log("Fehler bei", id, e.statusCode);
+      if (e.statusCode === 404 || e.statusCode === 410) await db.from("push_abos").delete().eq("id", id);
+    }
+  }
+}
+
+async function schonGesendet(schluessel, tage = null) {
+  const { data } = await db.from("erinnerungen").select("gesendet_um").eq("schluessel", schluessel).maybeSingle();
+  if (!data) return false;
+  if (tage === null) return true;
+  return Date.now() - new Date(data.gesendet_um) < tage * 864e5;
+}
+
+async function merken(schluessel) {
+  await db.from("erinnerungen").upsert({ schluessel, gesendet_um: new Date().toISOString() });
+}
+
+// 1) Täglicher Foto-Alarm
+async function fotoAlarm(jetzt, test) {
+  if (test) return senden({ title: "Test 🔔", body: "Der Wecker funktioniert! 🎉" });
+  if (jetzt.minuten < zielMinuten(jetzt.tag)) return console.log("Noch nicht Zeit für den Foto-Alarm.");
   const { data: letzte } = await db.from("alarme").select("ausgeloest_um")
     .order("ausgeloest_um", { ascending: false }).limit(1);
   if (letzte?.length && berlin(new Date(letzte[0].ausgeloest_um)).tag === jetzt.tag) {
-    console.log("Heute schon ausgelöst."); process.exit(0);
+    return console.log("Foto-Alarm heute schon ausgelöst.");
   }
   const { error } = await db.from("alarme").insert({ ausgeloest_um: new Date().toISOString() });
   if (error) throw error;
+  await senden({ title: "📸 Jetzt!", body: "Zeig, was du gerade machst – du hast 2 Minuten!" });
 }
 
-const { data: abos, error: fehler } = await db.from("push_abos").select("id, abo");
-if (fehler) throw fehler;
-
-const nachricht = JSON.stringify(test
-  ? { title: "Test 🔔", body: "Der Wecker funktioniert! 🎉" }
-  : { title: "📸 Jetzt!", body: "Zeig, was du gerade machst – du hast 2 Minuten!" });
-
-for (const { id, abo } of abos) {
-  try {
-    await webpush.sendNotification(abo, nachricht, { TTL: 300, urgency: "high" });
-    console.log("Gesendet an", id);
-  } catch (e) {
-    console.log("Fehler bei", id, e.statusCode);
-    if (e.statusCode === 404 || e.statusCode === 410) await db.from("push_abos").delete().eq("id", id);
+// 2) Abhol-Erinnerung am Ankunftstag
+async function abholErinnerung(jetzt, leute) {
+  if (jetzt.minuten < ABHOL_STUNDE * 60) return;
+  const { data: besuche } = await db.from("besuche").select("*")
+    .gte("ankunft", new Date(Date.now() - 864e5).toISOString())
+    .lte("ankunft", new Date(Date.now() + 2 * 864e5).toISOString());
+  for (const b of besuche || []) {
+    const ankunft = new Date(b.ankunft);
+    if (berlin(ankunft).tag !== jetzt.tag) continue;
+    const schluessel = "abholen-" + b.id;
+    if (await schonGesendet(schluessel)) continue;
+    const reisender = vorname(b.reisender);
+    const abholer = leute.filter(p => p.name !== reisender).map(p => p.user_id);
+    if (!abholer.length) continue;
+    const uhrzeit = ankunft.toLocaleTimeString("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" });
+    await senden({ title: "Heute ist es so weit! 💕", body: `${reisender} kommt um ${uhrzeit} Uhr am Hauptbahnhof an – nicht vergessen abzuholen! 🚉` }, abholer);
+    await merken(schluessel);
   }
 }
+
+// 3) Ticket-Erinnerung: Wer ist als Nächstes dran?
+async function ticketErinnerung(jetzt, leute) {
+  if (jetzt.minuten < 10 * 60 || jetzt.minuten >= 20 * 60) return;
+  const jetztIso = new Date().toISOString();
+  const { data: geplant } = await db.from("besuche").select("id").gt("ankunft", jetztIso).limit(1);
+  if (geplant?.length) return; // nächstes Treffen ist schon eingetragen
+  const { data: letzte } = await db.from("besuche").select("*")
+    .lte("ankunft", jetztIso).order("ankunft", { ascending: false }).limit(1);
+  if (!letzte?.length) return;
+  const b = letzte[0];
+  const ende = new Date(b.abreise ? b.abreise + "T23:59:00" : b.ankunft);
+  if (Date.now() - ende < 3 * 864e5) return; // erst 3 Tage nach dem Treffen
+  const schluessel = "ticket-" + b.id;
+  if (await schonGesendet(schluessel, 7)) return; // höchstens einmal pro Woche
+  const zuletzt = vorname(b.reisender);
+  const naechster = leute.filter(p => p.name !== zuletzt).map(p => p.user_id);
+  if (!naechster.length) return;
+  await senden({ title: "Du bist dran! 🚆", body: `${zuletzt} ist zuletzt gefahren – denk an dein Zugticket. Früh gebucht ist meistens günstiger!` }, naechster);
+  await merken(schluessel);
+}
+
+const test = process.env.TEST === "true";
+const jetzt = berlin(new Date());
+const { data: leute, error: personenFehler } = await db.from("personen").select("user_id, name");
+if (personenFehler) throw personenFehler;
+
+await fotoAlarm(jetzt, test);
+await abholErinnerung(jetzt, leute);
+await ticketErinnerung(jetzt, leute);
