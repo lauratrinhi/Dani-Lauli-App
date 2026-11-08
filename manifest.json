@@ -1,0 +1,8 @@
+{
+  "name": "Wir zwei",
+  "short_name": "Wir zwei",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fff7f5",
+  "theme_color": "#e86a7a"
+}
