@@ -40,7 +40,7 @@
       <div style="flex:1" class="kommentar">${inhalt}</div>${knoepfe}
     </div>`;
   const kleinerKnopf = (onclick, text, aktiv) =>
-    `<button onclick="${onclick}" style="width:auto;background:${aktiv ? "#e8707e" : "#f3f3f3"};color:${aktiv ? "white" : "#333"}">${text}</button>`;
+    `<button onclick="${onclick}" style="width:auto;background:${aktiv ? "#1f3a68" : "#f3f3f3"};color:${aktiv ? "white" : "#333"}">${text}</button>`;
 
   async function laden() {
     const [w, i] = await Promise.all([
@@ -111,7 +111,7 @@
   function aktivieren() {
     document.querySelectorAll("[data-tab]").forEach(b => {
       const aktiv = b.dataset.tab === "wuensche";
-      b.style.background = aktiv ? "#e8707e" : "#f3f3f3";
+      b.style.background = aktiv ? "#1f3a68" : "#f3f3f3";
       b.style.color = aktiv ? "white" : "#333";
     });
     document.querySelectorAll(".ex-bereich").forEach(d => { d.style.display = d.id === "tab-wuensche" ? "" : "none"; });
