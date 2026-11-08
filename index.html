@@ -357,6 +357,7 @@ function gifFenster() {
           <div style="display:flex;gap:6px;margin-top:8px">
         <button id="artGifs" onclick="gifArtWechseln('gifs')" style="flex:1">GIFs</button>
         <button id="artStickers" onclick="gifArtWechseln('stickers')" style="flex:1;background:#f3f3f3;color:#333">Sticker</button>
+                <button id="artEigene" onclick="gifArtWechseln('eigene')" style="flex:1;background:#f3f3f3;color:#333">⭐ Eigene</button>
       </div>
       <div id="gifErgebnisse" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;overflow-y:auto;margin-top:8px;flex:1;align-content:start"></div>
       <div class="meta" style="text-align:center">Powered by GIPHY</div>
@@ -369,6 +370,7 @@ function gifFenster() {
 }
 
 async function gifLaden(suche) {
+    if (gifArt === "eigene") return eigeneStickerLaden();
   const box = document.getElementById("gifErgebnisse");
   const url = suche.trim()
     ? `https://api.giphy.com/v1/${gifArt}/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(suche)}&limit=24&rating=pg-13&lang=de`
@@ -393,10 +395,85 @@ function gifSuchen(postId) {
   gifLaden("");
 }
 
+let stickerBearbeiten = false;
+
+async function eigeneStickerLaden() {
+  const box = document.getElementById("gifErgebnisse");
+  const { data } = await db.from("sticker").select("*").order("erstellt_um", { ascending: false });
+  window.eigeneSticker = data || [];
+  const kacheln = window.eigeneSticker.map(s => `
+    <div style="position:relative">
+      <img src="${schuetzen(s.url)}" onclick="${stickerBearbeiten ? `stickerLoeschen(${s.id})` : `stickerSenden(${s.id})`}" style="width:100%;aspect-ratio:1;object-fit:contain;border-radius:8px;background:#f3f3f3">
+      ${stickerBearbeiten ? '<div style="position:absolute;top:4px;right:6px;font-size:20px;pointer-events:none">🗑️</div>' : ""}
+    </div>`).join("");
+  box.innerHTML = `
+    <div style="grid-column:1/-1;display:flex;gap:6px">
+      <button onclick="document.getElementById('stickerDatei').click()">+ Eigenen Sticker hinzufügen</button>
+      <button onclick="stickerBearbeitenUmschalten()" style="width:auto;background:#f3f3f3;color:#333">${stickerBearbeiten ? "Fertig" : "✏️"}</button>
+    </div>
+    <input id="stickerDatei" type="file" accept="image/*" class="versteckt" onchange="stickerHochladen(this.files[0])">
+    ${kacheln || '<div class="meta" style="grid-column:1/-1">Noch keine eigenen Sticker</div>'}`;
+}
+
+function stickerBearbeitenUmschalten() {
+  stickerBearbeiten = !stickerBearbeiten;
+  eigeneStickerLaden();
+}
+
+function stickerVerkleinern(datei) {
+  return new Promise((ok, fehler) => {
+    const bild = new Image();
+    bild.onload = () => {
+      const f = Math.min(1, 400 / Math.max(bild.width, bild.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(bild.width * f);
+      c.height = Math.round(bild.height * f);
+      c.getContext("2d").drawImage(bild, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(bild.src);
+      c.toBlob(b => b ? ok(b) : fehler(new Error("Bild konnte nicht umgewandelt werden")), "image/png");
+    };
+    bild.onerror = () => fehler(new Error("Bild konnte nicht geladen werden"));
+    bild.src = URL.createObjectURL(datei);
+  });
+}
+
+async function stickerHochladen(datei) {
+  if (!datei) return;
+  try {
+    const blob = await stickerVerkleinern(datei);
+    const pfad = ich.id + "/" + Date.now() + ".png";
+    const { error } = await db.storage.from("sticker").upload(pfad, blob, { contentType: "image/png" });
+    if (error) throw error;
+    const { data } = db.storage.from("sticker").getPublicUrl(pfad);
+    const { error: fehler } = await db.from("sticker").insert({ url: data.publicUrl, pfad });
+    if (fehler) throw fehler;
+    eigeneStickerLaden();
+  } catch (e) {
+    alert("Sticker konnte nicht hochgeladen werden: " + e.message);
+  }
+}
+
+async function stickerSenden(id) {
+  const s = (window.eigeneSticker || []).find(x => x.id === id);
+  if (!s) return;
+  gifSchliessen();
+  const { error } = await db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: s.url });
+  if (error) return alert("Fehler: " + error.message);
+  ladeFeed();
+}
+
+async function stickerLoeschen(id) {
+  if (!confirm("Diesen Sticker aus eurer Sammlung löschen?")) return;
+  await db.from("sticker").delete().eq("id", id);
+  eigeneStickerLaden();
+}
+
 function gifArtWechseln(art) {
   gifArt = art;
-  document.getElementById("artGifs").style.cssText = art === "gifs" ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
-  document.getElementById("artStickers").style.cssText = art === "stickers" ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
+  [["artGifs", "gifs"], ["artStickers", "stickers"], ["artEigene", "eigene"]].forEach(([id, a]) => {
+    const k = document.getElementById(id);
+    if (k) k.style.cssText = a === art ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
+  });
   gifLaden(document.getElementById("gifSuche").value);
 }
   function gifSchliessen() {
