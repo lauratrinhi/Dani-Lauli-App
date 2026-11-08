@@ -411,11 +411,58 @@ async function eigeneStickerLaden() {
       <button onclick="document.getElementById('stickerDatei').click()">+ Eigenen Sticker hinzufügen</button>
       <button onclick="stickerBearbeitenUmschalten()" style="width:auto;background:#f3f3f3;color:#333">${stickerBearbeiten ? "Fertig" : "✏️"}</button>
     </div>
+   <div class="meta" style="grid-column:1/-1">Sticker aus deiner Tastatur: Tipp ins Feld und wähl einen aus 👇</div>
+    <div id="tastaturFeld" contenteditable="true" style="grid-column:1/-1;min-height:44px;border:2px dashed #1f3a68;border-radius:10px;padding:10px;background:#fff"></div>
     <input id="stickerDatei" type="file" accept="image/*" class="versteckt" onchange="stickerHochladen(this.files[0])">
     ${kacheln || '<div class="meta" style="grid-column:1/-1">Noch keine eigenen Sticker</div>'}`;
+    tastaturFeldEinrichten();
 }
 
-function stickerBearbeitenUmschalten() {
+async function tastaturSticker(datei) {
+  const feld = document.getElementById("tastaturFeld");
+  if (feld) feld.innerHTML = "";
+  try {
+    const blob = await stickerVerkleinern(datei);
+    const pfad = ich.id + "/" + Date.now() + ".png";
+    const { error } = await db.storage.from("sticker").upload(pfad, blob, { contentType: "image/png" });
+    if (error) throw error;
+    const url = db.storage.from("sticker").getPublicUrl(pfad).data.publicUrl;
+    await db.from("sticker").insert({ url, pfad });
+    gifSchliessen();
+    const { error: fehler } = await db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: url });
+    if (fehler) throw fehler;
+    ladeFeed();
+  } catch (e) {
+    alert("Sticker konnte nicht gesendet werden: " + e.message);
+  }
+}
+
+function tastaturFeldEinrichten() {
+  const feld = document.getElementById("tastaturFeld");
+  if (!feld || feld.dataset.bereit) return;
+  feld.dataset.bereit = "1";
+  const bildAus = dt => dt && [...(dt.files || [])].find(f => f.type.startsWith("image/"));
+  feld.addEventListener("paste", e => {
+    const datei = bildAus(e.clipboardData);
+    if (datei) { e.preventDefault(); tastaturSticker(datei); }
+  });
+  feld.addEventListener("beforeinput", e => {
+    const datei = bildAus(e.dataTransfer);
+    if (datei) { e.preventDefault(); tastaturSticker(datei); }
+  });
+  feld.addEventListener("input", async () => {
+    const bild = feld.querySelector("img");
+    if (!bild) return;
+    try {
+      const blob = await (await fetch(bild.src)).blob();
+      tastaturSticker(new File([blob], "sticker.png", { type: blob.type || "image/png" }));
+    } catch (e) {
+      feld.innerHTML = "";
+      alert("Dieser Sticker lässt sich hier leider nicht einfügen.");
+    }
+  });
+}
+  function stickerBearbeitenUmschalten() {
   stickerBearbeiten = !stickerBearbeiten;
   eigeneStickerLaden();
 }
