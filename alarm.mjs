@@ -175,6 +175,35 @@ async function todoErinnerung(jetzt) {
     await merken(schluessel);
   }
 }
+// 8) ABC-Date: Wer plant den nächsten Buchstaben? (bis zu 7 Tage vor dem nächsten Treffen, 10–20 Uhr)
+async function abcErinnerung(jetzt, leute) {
+  if (jetzt.minuten < 10 * 60 || jetzt.minuten >= 20 * 60) return;
+  const { data: naechste } = await db.from("besuche").select("*")
+    .gt("ankunft", new Date().toISOString())
+    .lte("ankunft", new Date(Date.now() + 7 * 864e5).toISOString())
+    .order("ankunft").limit(1);
+  if (!naechste?.length) return;
+  const b = naechste[0];
+  const schluessel = "abc-" + b.id;
+  if (await schonGesendet(schluessel)) return;
+  const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  const { data } = await db.from("abc_buchstaben").select("*");
+  const zeilen = data || [];
+  const fertig = zeilen.filter(z => z.erledigt);
+  const aktuell = ABC.find(x => !fertig.some(z => z.buchstabe === x));
+  if (!aktuell) return;
+  let planer = zeilen.find(z => z.buchstabe === aktuell)?.geplant_von || null;
+  const letzte = fertig.sort((x, y) => ABC.indexOf(y.buchstabe) - ABC.indexOf(x.buchstabe))[0];
+  if (!planer && letzte?.geplant_von) planer = leute.find(p => p.user_id !== letzte.geplant_von)?.user_id || null;
+  const tage = Math.max(1, Math.round((new Date(b.ankunft) - Date.now()) / 864e5));
+  const wann = `Ihr seht euch in ${tage} ${tage === 1 ? "Tag" : "Tagen"}`;
+  if (planer) {
+    await senden({ title: "🔤 ABC-Date", body: `${wann} – du planst das ${aktuell}-Date!` }, [planer]);
+  } else {
+    await senden({ title: "🔤 ABC-Date", body: `${wann} – wer plant das ${aktuell}-Date?` });
+  }
+  await merken(schluessel);
+}
 const test = process.env.TEST === "true";
 const jetzt = berlin(new Date());
 const { data: leute, error: personenFehler } = await db.from("personen").select("user_id, name");
@@ -188,3 +217,4 @@ await essenErinnerung(jetzt, leute);
 await checkinErinnerung(jetzt, leute);
 await rueckblickErinnerung(jetzt);
 await todoErinnerung(jetzt);
+await abcErinnerung(jetzt, leute);
