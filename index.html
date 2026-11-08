@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wir zwei">
+<title>Wir zwei</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 0; background: #fff7f5; color: #333; }
+  header { background: #e8707e; color: white; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); text-align: center; font-size: 20px; font-weight: 600; }
+  main { padding: 16px; max-width: 500px; margin: auto; }
+  input, button, textarea { font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  button { background: #e8707e; color: white; border: none; font-weight: 600; }
+  .post { background: white; border-radius: 16px; padding: 12px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+  .post img, .post video { width: 100%; border-radius: 12px; }
+  .meta { font-size: 13px; color: #888; margin: 6px 0; }
+  .spaet { color: #c0392b; font-weight: 600; }
+  .emojis button { width: auto; background: #f3f3f3; color: #333; margin-right: 6px; padding: 6px 10px; }
+  .kommentar { font-size: 14px; margin: 4px 0; }
+  .versteckt { display: none; }
+</style>
+</head>
+<body>
+<header>Wir zwei 💕</header>
+<main>
+  <div id="login">
+    <input id="email" type="email" placeholder="E-Mail">
+    <input id="passwort" type="password" placeholder="Passwort">
+    <button onclick="einloggen()">Einloggen</button>
+  </div>
+
+  <div id="app" class="versteckt">
+    <label><button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button></label>
+    <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
+    <div id="status" class="meta"></div>
+    <div id="feed"></div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "sb_publishable_pFCNvR9izezcO8GZOD6tTA_ET-YppfI";
+const SUPABASE_KEY = "https://uqsakgfdlcnvqqkhdryt.supabase.co/rest/v1/";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const EMOJIS = ["❤️", "😂", "😮"];
+let ich = null;
+
+async function start() {
+  const { data } = await db.auth.getSession();
+  if (data.session) { ich = data.session.user; zeigeApp(); }
+}
+
+async function einloggen() {
+  const { data, error } = await db.auth.signInWithPassword({
+    email: document.getElementById("email").value,
+    password: document.getElementById("passwort").value
+  });
+  if (error) return alert("Login fehlgeschlagen: " + error.message);
+  ich = data.user; zeigeApp();
+}
+
+function zeigeApp() {
+  document.getElementById("login").classList.add("versteckt");
+  document.getElementById("app").classList.remove("versteckt");
+  ladeFeed();
+}
+
+async function hochladen(datei) {
+  if (!datei) return;
+  const status = document.getElementById("status");
+  status.textContent = "Wird hochgeladen …";
+  const typ = datei.type.startsWith("video") ? "video" : "foto";
+
+  // Letzten Alarm von heute holen und prüfen, ob man zu spät ist (2 Minuten)
+  const { data: alarme } = await db.from("alarme").select("*").order("ausgeloest_um", { ascending: false }).limit(1);
+  let alarmId = null, zuSpaet = false;
+  if (alarme && alarme.length) {
+    const zeit = new Date(alarme[0].ausgeloest_um);
+    if (zeit.toDateString() === new Date().toDateString()) {
+      alarmId = alarme[0].id;
+      zuSpaet = (Date.now() - zeit.getTime()) > 2 * 60 * 1000;
+    }
+  }
+
+  const pfad = ich.id + "/" + Date.now() + "-" + datei.name;
+  const { error: fehler } = await db.storage.from("medien").upload(pfad, datei);
+  if (fehler) { status.textContent = ""; return alert("Upload fehlgeschlagen: " + fehler.message); }
+
+  await db.from("posts").insert({ datei_pfad: pfad, typ, alarm_id: alarmId, zu_spaet: zuSpaet });
+  status.textContent = "Gepostet! ✅";
+  document.getElementById("datei").value = "";
+  ladeFeed();
+}
+
+async function ladeFeed() {
+  const { data: posts } = await db.from("posts")
+    .select("*, reaktionen(*), kommentare(*)")
+    .order("erstellt_um", { ascending: false }).limit(30);
+  const feed = document.getElementById("feed");
+  feed.innerHTML = "";
+
+  for (const p of posts || []) {
+    const { data: link } = await db.storage.from("medien").createSignedUrl(p.datei_pfad, 3600);
+    const von = p.user_id === ich.id ? "Du" : "Dein Schatz";
+    const zeit = new Date(p.erstellt_um).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+    const medium = p.typ === "video"
+      ? `<video src="${link.signedUrl}" controls playsinline></video>`
+      : `<img src="${link.signedUrl}">`;
+
+    const zaehler = EMOJIS.map(e => {
+      const anzahl = p.reaktionen.filter(r => r.emoji === e).length;
+      return `<button onclick="reagieren(${p.id}, '${e}')">${e} ${anzahl || ""}</button>`;
+    }).join("");
+
+    const kommentare = p.kommentare
+      .sort((a, b) => new Date(a.erstellt_um) - new Date(b.erstellt_um))
+      .map(k => `<div class="kommentar"><b>${k.user_id === ich.id ? "Du" : "Schatz"}:</b> ${schuetzen(k.text)}</div>`).join("");
+
+    const div = document.createElement("div");
+    div.className = "post";
+    div.innerHTML = `
+      ${medium}
+      <div class="meta">${von} · ${zeit} ${p.zu_spaet ? '<span class="spaet">· zu spät ⏰</span>' : ""}</div>
+      <div class="emojis">${zaehler}</div>
+      ${kommentare}
+      <input id="k${p.id}" placeholder="Kommentar schreiben …">
+      <button onclick="kommentieren(${p.id})">Senden</button>`;
+    feed.appendChild(div);
+  }
+}
+
+async function reagieren(postId, emoji) {
+  const { error } = await db.from("reaktionen").insert({ post_id: postId, emoji });
+  if (error) await db.from("reaktionen").delete().match({ post_id: postId, emoji, user_id: ich.id });
+  ladeFeed();
+}
+
+async function kommentieren(postId) {
+  const feld = document.getElementById("k" + postId);
+  if (!feld.value.trim()) return;
+  await db.from("kommentare").insert({ post_id: postId, text: feld.value.trim() });
+  ladeFeed();
+}
+
+function schuetzen(t) {
+  return t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+start();
+</script>
+</body>
+</html>
