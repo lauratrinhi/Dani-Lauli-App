@@ -38,13 +38,13 @@
   <details>
     <summary class="meta">Nächstes Treffen eintragen</summary>
     <select id="reisender" style="width:100%;padding:10px;font-size:16px;margin:6px 0">
-      <option>Laura fährt nach München</option>
+      <option>Lauli fährt nach München</option>
       <option>Dani fährt nach Düsseldorf</option>
     </select>
     <div class="meta">Ankunft</div>
     <input id="ankunft" type="datetime-local">
     <div class="meta">Abreise</div>
-    <input id="abreise" type="date">
+    <input id="abreise" type="datetime-local">
     <button onclick="besuchSpeichern()" style="margin-top:8px">Speichern</button>
   </details>
 </div>
@@ -61,7 +61,7 @@
 const SUPABASE_URL = "https://uqsakgfdlcnvqqkhdryt.supabase.co";
 const SUPABASE_KEY = "sb_publishable_pFCNvR9izezcO8GZOD6tTA_ET-YppfI";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-const EMOJIS = ["❤️", "😂", "😮"];
+const EMOJIS = ["❤️", "😂", "😭", "😮"];
 let ich = null;
 
 async function start() {
