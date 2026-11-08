@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Wir zwei">
 <title>Wir zwei</title>
+  <link rel="manifest" href="manifest.json">
 <style>
   body { font-family: -apple-system, sans-serif; margin: 0; background: #fff7f5; color: #333; }
   header { background: #e8707e; color: white; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); text-align: center; font-size: 20px; font-weight: 600; }
@@ -33,6 +34,7 @@
   <div id="app" class="versteckt">
     <label><button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button></label>
     <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
+    <button onclick="pushAktivieren()">🔔 Benachrichtigungen aktivieren</button>
     <div id="status" class="meta"></div>
     <div id="feed"></div>
   </div>
