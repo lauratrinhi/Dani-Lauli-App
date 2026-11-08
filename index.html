@@ -129,7 +129,8 @@ async function ladeFeed() {
 
   for (const p of posts || []) {
     const { data: link } = await db.storage.from("medien").createSignedUrl(p.datei_pfad, 3600);
-    const von = p.user_id === ich.id ? "Du" : "Dein Schatz";
+if (!leute.length) leute = (await db.from("personen").select("user_id, name")).data || [];
+const von = (leute.find(x => x.user_id === p.user_id) || {}).name || "?";
     const zeit = new Date(p.erstellt_um).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
     const medium = p.typ === "video"
       ? `<video src="${link.signedUrl}" controls playsinline></video>`
