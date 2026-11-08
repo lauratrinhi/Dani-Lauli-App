@@ -58,7 +58,7 @@
 </div>
     <label><button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button></label>
     <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
-    <button onclick="pushAktivieren()">🔔 Benachrichtigungen aktivieren</button>
+<button id="pushKnopf" onclick="pushUmschalten()">🔔 Benachrichtigungen aktivieren</button>
     <div id="status" class="meta"></div>
     <div id="feed"></div>
   </div>
@@ -92,6 +92,7 @@ function zeigeApp() {
   ladeFeed();
   ladeBesuch();
   ladeNotizen();
+  pushStatusZeigen();
 }
 
 async function hochladen(datei) {
@@ -125,11 +126,16 @@ async function ladeFeed() {
   const { data: posts } = await db.from("posts")
     .select("*, reaktionen(*), kommentare(*)")
     .order("erstellt_um", { ascending: false }).limit(30);
-  const feed = document.getElementById("feed");
-  feed.innerHTML = "";
+  const feed = document.createDocumentFragment();
+const linkSpeicher = window.feedLinks = window.feedLinks || {};
+const fehlend = (posts || []).map(p => p.datei_pfad).filter(x => !linkSpeicher[x]);
+if (fehlend.length) {
+  const { data: neu } = await db.storage.from("medien").createSignedUrls(fehlend, 86400);
+  (neu || []).forEach(l => { if (l.signedUrl) linkSpeicher[l.path] = l.signedUrl; });
+}
 
   for (const p of posts || []) {
-    const { data: link } = await db.storage.from("medien").createSignedUrl(p.datei_pfad, 3600);
+const link = { signedUrl: linkSpeicher[p.datei_pfad] };
 if (!leute.length) leute = (await db.from("personen").select("user_id, name")).data || [];
 const von = (leute.find(x => x.user_id === p.user_id) || {}).name || "?";
     const zeit = new Date(p.erstellt_um).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
@@ -144,7 +150,7 @@ const von = (leute.find(x => x.user_id === p.user_id) || {}).name || "?";
 
     const kommentare = p.kommentare
       .sort((a, b) => new Date(a.erstellt_um) - new Date(b.erstellt_um))
-      .map(k => `<div class="kommentar"><b>${k.user_id === ich.id ? "Du" : "Schatz"}:</b> ${schuetzen(k.text)}</div>`).join("");
+      .map(k => `<div class="kommentar"><b>${(leute.find(x => x.user_id === k.user_id) || {}).name || "?"}:</b> ${schuetzen(k.text)}</div>`).join("");
 
     const div = document.createElement("div");
     div.className = "post";
@@ -157,6 +163,9 @@ const von = (leute.find(x => x.user_id === p.user_id) || {}).name || "?";
       <button onclick="kommentieren(${p.id})">Senden</button>`;
     feed.appendChild(div);
   }
+  const y = window.scrollY;
+document.getElementById("feed").replaceChildren(feed);
+window.scrollTo(0, y);
 }
 
 async function reagieren(postId, emoji) {
@@ -301,6 +310,35 @@ async function notizErledigt(id) {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && ich) ladeNotizen();
 });
+  async function pushStatusZeigen() {
+  const knopf = document.getElementById("pushKnopf");
+  if (!knopf) return;
+  let aktiv = false;
+  if ("serviceWorker" in navigator && "PushManager" in window && Notification.permission === "granted") {
+    const reg = await navigator.serviceWorker.getRegistration();
+    aktiv = !!(reg && await reg.pushManager.getSubscription());
+  }
+  knopf.dataset.aktiv = aktiv ? "1" : "";
+  knopf.textContent = aktiv ? "🔔 Benachrichtigungen sind an" : "🔕 Benachrichtigungen aktivieren";
+  knopf.style.background = aktiv ? "#f3f3f3" : "";
+  knopf.style.color = aktiv ? "#333" : "";
+}
+
+async function pushUmschalten() {
+  const knopf = document.getElementById("pushKnopf");
+  if (knopf.dataset.aktiv) {
+    if (!confirm("Benachrichtigungen auf diesem Handy ausschalten?")) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const abo = reg && await reg.pushManager.getSubscription();
+    if (abo) {
+      await db.from("push_abos").delete().eq("abo->>endpoint", abo.endpoint);
+      await abo.unsubscribe();
+    }
+  } else {
+    await pushAktivieren();
+  }
+  pushStatusZeigen();
+}
   window.addEventListener("error", e => alert("Fehler: " + e.message));
 window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
   start();
