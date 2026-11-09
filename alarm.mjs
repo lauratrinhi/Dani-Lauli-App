@@ -204,6 +204,25 @@ async function abcErinnerung(jetzt, leute) {
   }
   await merken(schluessel);
 }
+// 9) Benachrichtigungen über neue Aktivitäten in der App
+async function ereignisseVerschicken() {
+  const { data } = await db.from("ereignisse").select("*").eq("gesendet", false).order("erstellt_um");
+  const liste = data || [];
+  if (!liste.length) return;
+  await db.from("ereignisse").update({ gesendet: true }).in("id", liste.map(e => e.id));
+  const proPerson = {};
+  liste.forEach(e => { (proPerson[e.an] = proPerson[e.an] || []).push(e); });
+  for (const [an, eintraege] of Object.entries(proPerson)) {
+    if (eintraege.length <= 3) {
+      for (const e of eintraege) await senden({ title: "Servus 🥨", body: e.text }, [an]);
+    } else {
+      await senden({
+        title: `Servus 🥨 · ${eintraege.length} Neuigkeiten`,
+        body: eintraege.slice(-3).map(e => e.text).join("\n")
+      }, [an]);
+    }
+  }
+}
 const test = process.env.TEST === "true";
 const jetzt = berlin(new Date());
 const { data: leute, error: personenFehler } = await db.from("personen").select("user_id, name");
@@ -218,3 +237,4 @@ await checkinErinnerung(jetzt, leute);
 await rueckblickErinnerung(jetzt);
 await todoErinnerung(jetzt);
 await abcErinnerung(jetzt, leute);
+await ereignisseVerschicken();
