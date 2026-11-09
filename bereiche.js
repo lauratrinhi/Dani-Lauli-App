@@ -602,9 +602,18 @@ B.watch = {
 /* =========================================================
    ACTIVITY · Orte (Restaurants, Cafés, Bars)
    ========================================================= */
-const ORT_ARTEN = { restaurant: ["Restaurants", "Restaurant", "tools-kitchen-2"], cafe: ["Cafés", "Café", "coffee"], bar: ["Bars", "Bar", "glass-cocktail"] };
+// [Mehrzahl im Satz, Einzahl, Symbol, Name in der Auswahl]
+const ORT_ARTEN = {
+  restaurant: ["Restaurants", "Restaurant", "tools-kitchen-2", "Restaurants"],
+  lunch: ["Lunch-Spots", "Lunch", "salad", "Lunch"],
+  snack: ["Snack-Spots", "Snack", "cookie", "Snacks"],
+  cafe: ["Cafés", "Café", "coffee", "Cafés"],
+  bar: ["Bars", "Bar", "glass-cocktail", "Bars"]
+};
+const GESCHMACK = { suess: "Süß", herzhaft: "Herzhaft", beides: "Süß & herzhaft" };
 const KUECHEN = ["Italienisch", "Pizza", "Japanisch", "Sushi", "Vietnamesisch", "Thailändisch", "Koreanisch", "Chinesisch", "Indisch", "Mexikanisch",
-  "Griechisch", "Türkisch", "Libanesisch", "Deutsch", "Bayerisch", "Burger", "Steak", "Vegetarisch", "Vegan", "Frühstück & Brunch", "Kuchen & Torten", "Cocktails", "Wein", "Bier"];
+  "Griechisch", "Türkisch", "Libanesisch", "Deutsch", "Bayerisch", "Burger", "Steak", "Vegetarisch", "Vegan", "Frühstück & Brunch", "Kuchen & Torten", "Cocktails", "Wein", "Bier",
+  "Mittagstisch", "Bowls", "Salate", "Sandwiches", "Bäckerei", "Eis", "Döner", "Streetfood", "Crêpes & Waffeln", "Donuts"];
 
 registriereSeite("orte", {
   render(el) {
@@ -650,14 +659,13 @@ B.orte = {
       const sterne = bewertungZeile(bewertungen, o.id, "ort_id");
       return `<div class="karte" id="ort-${o.id}">
         <div style="font-weight:700;font-size:17px">${schuetzen(o.name)}</div>
-        <div class="meta">${o.kueche ? schuetzen(o.kueche) + " · " : ""}${ORT_ARTEN[o.art][1]}${sterne ? " · " + sterne : ""}</div>
+        <div class="meta">${o.kueche ? schuetzen(o.kueche) + " · " : ""}${(ORT_ARTEN[o.art] || ORT_ARTEN.restaurant)[1]}${o.art === "snack" && GESCHMACK[o.geschmack] ? " · " + GESCHMACK[o.geschmack] : ""}${sterne ? " · " + sterne : ""}</div>
         <a class="meta" style="display:inline-flex;gap:4px;align-items:center;color:var(--blau-text)" href="${this.karten(o)}" target="_blank" rel="noopener"><i class="ti ti-map-pin"></i>${o.adresse ? schuetzen(o.adresse) : "In Karten öffnen"}</a>
         ${bilder.length ? `<div class="raster" style="margin-top:10px">${bilder.map(f => bildTag(f.datei_pfad)).join("")}</div>` : ""}
         <div class="reihe" style="margin-top:12px">
           <button class="knopf" onclick="B.orte.bewerten(${o.id})"><i class="ti ti-star"></i> Bewerten</button>
           ${o.besucht ? "" : `<button class="knopf zweit" onclick="B.orte.besucht(${o.id})"><i class="ti ti-check"></i> Waren da</button>`}
-          <button class="icon-knopf rund" onclick="B.orte.fotos(${o.id})" aria-label="Fotos"><i class="ti ti-camera-plus"></i></button>
-          <button class="icon-knopf" onclick="B.orte.loeschen(${o.id})" aria-label="Löschen"><i class="ti ti-trash"></i></button>
+          <button class="icon-knopf rund" onclick="B.orte.mehr(${o.id})" aria-label="Mehr"><i class="ti ti-dots"></i></button>
         </div>
         ${eigene.length ? `<details style="margin-top:10px"><summary>Bewertungen (${eigene.length}) <i class="ti ti-chevron-down"></i></summary>${eigene.map(b =>
           `<div class="kommentar"><b>${schuetzen(nameVon(b.user_id))}</b> <span class="sterne">${sterneText(b.sterne)}</span> <span class="meta">${datumKurz(b.erstellt_um)}</span>${b.kommentar ? "<br>" + schuetzen(b.kommentar) : ""}</div>`).join("")}</details>` : ""}
@@ -667,7 +675,8 @@ B.orte = {
     setzeHtml(el, `
       <div class="chips">${this.staedte().map(s => `<button class="chip ${s === this.stadt ? "aktiv" : ""}" data-stadt="${schuetzen(s)}" onclick="B.orte.stadtWahl(this.dataset.stadt)">${schuetzen(s)}</button>`).join("")}
         <button class="chip" onclick="B.orte.neueStadt()"><i class="ti ti-plus"></i> Stadt</button></div>
-      ${segmentHtml(Object.entries(ORT_ARTEN).map(([k, [p]]) => [k, `${p} (${orte.filter(o => o.stadt === this.stadt && o.art === k).length})`]), this.art, "B.orte.artWahl")}
+      <div class="ort-arten">${Object.entries(ORT_ARTEN).map(([k, [, , icon, name]]) => `
+        <button class="${k === this.art ? "aktiv" : ""}" onclick="B.orte.artWahl('${k}')"><i class="ti ti-${icon}"></i><span>${name}</span><small>${orte.filter(o => o.stadt === this.stadt && o.art === k).length}</small></button>`).join("")}</div>
       <div class="reihe" style="margin-bottom:14px">
         ${wuerfelKnopf("B.orte.zufall()")}
         <button class="knopf zweit" onclick="B.orte.neu()"><i class="ti ti-plus"></i> Neuer Ort</button>
@@ -682,7 +691,7 @@ B.orte = {
   artWahl(a) { this.art = a; this.neuZeichnen(); },
 
   async neueStadt() {
-    const s = await eingabe("Neue Stadt", { platzhalter: "z. B. Lissabon", hinweis: "Praktisch für Urlaube: Restaurants, Cafés und Bars vorab sammeln.", ok: "Hinzufügen" });
+    const s = await eingabe("Neue Stadt", { platzhalter: "z. B. Lissabon", hinweis: "Praktisch für Urlaube: Restaurants, Snacks, Cafés und Bars vorab sammeln.", ok: "Hinzufügen" });
     if (!s) return;
     if (!this.staedte().includes(s)) this.extra.push(s);
     this.stadtWahl(s);
@@ -694,14 +703,20 @@ B.orte = {
       <select class="f-art">${Object.entries(ORT_ARTEN).map(([k, [, e]]) => `<option value="${k}" ${k === this.art ? "selected" : ""}>${e}</option>`).join("")}</select>
       <input class="f-stadt" list="orteStaedte" placeholder="Stadt" value="${schuetzen(this.stadt)}">
       <datalist id="orteStaedte">${this.staedte().map(s => `<option value="${schuetzen(s)}">`).join("")}</datalist>
+      <select class="f-geschmack" style="display:${this.art === "snack" ? "block" : "none"}">${Object.entries(GESCHMACK).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")}</select>
       <input class="f-kueche" list="orteKuechen" placeholder="Küche, z. B. Italienisch (optional)">
       <datalist id="orteKuechen">${KUECHEN.map(k => `<option value="${k}">`).join("")}</datalist>
       <input class="f-adresse" placeholder="Adresse (optional)">
       <select class="f-besucht"><option value="nein">Wollen wir hin</option><option value="ja">Waren wir schon</option></select>`, {
+      beiStart: el => {
+        el.querySelector(".f-art").addEventListener("change", e => { el.querySelector(".f-geschmack").style.display = e.target.value === "snack" ? "block" : "none"; });
+      },
       absenden: async el => {
         const name = wert(el, ".f-name"), stadt = wert(el, ".f-stadt"), art = wert(el, ".f-art");
         if (!name || !stadt) { toast("Bitte Name und Stadt eintragen", "fehler"); return false; }
-        const ok = await tun(db.from("orte").insert({ name, stadt, art, kueche: wert(el, ".f-kueche") || null, adresse: wert(el, ".f-adresse") || null, besucht: wert(el, ".f-besucht") === "ja" }));
+        const zeile = { name, stadt, art, kueche: wert(el, ".f-kueche") || null, adresse: wert(el, ".f-adresse") || null, besucht: wert(el, ".f-besucht") === "ja" };
+        if (art === "snack") zeile.geschmack = wert(el, ".f-geschmack");
+        const ok = await tun(db.from("orte").insert(zeile));
         if (!ok) return false;
         this.stadt = stadt; this.art = art; speicher.schreiben("orteStadt", stadt);
         seiteAktualisieren();
@@ -735,26 +750,87 @@ B.orte = {
     seiteAktualisieren();
   },
 
+  mehr(id) {
+    const o = this.finden(id);
+    if (!o) return;
+    const zeile = (a, icon, text, rot = false) => `<div class="zeile" data-a="${a}"><i class="ti ti-${icon}" style="font-size:22px;color:${rot ? "var(--rot)" : "var(--blau-text)"}"></i><div class="inhalt"><div class="haupt" style="${rot ? "color:var(--rot)" : ""}">${text}</div></div></div>`;
+    const b = blatt(`
+      <h3>${schuetzen(o.name)}</h3>
+      <div class="auswahl-liste">
+        ${zeile("fotos", "camera-plus", "Fotos hinzufügen")}
+        ${zeile("art", "category", "Kategorie ändern")}
+        ${zeile("loeschen", "trash", "Löschen", true)}
+      </div>`);
+    b.el.addEventListener("click", e => {
+      const k = e.target.closest("[data-a]");
+      if (!k) return;
+      b.zu();
+      if (k.dataset.a === "fotos") this.fotos(id);
+      else if (k.dataset.a === "art") this.artAendern(id);
+      else this.loeschen(id);
+    });
+  },
+
+  artAendern(id) {
+    const o = this.finden(id);
+    formularBlatt("Kategorie ändern", `
+      <select class="f-art">${Object.entries(ORT_ARTEN).map(([k, [, e]]) => `<option value="${k}" ${k === o.art ? "selected" : ""}>${e}</option>`).join("")}</select>
+      <select class="f-geschmack" style="display:${o.art === "snack" ? "block" : "none"}">${Object.entries(GESCHMACK).map(([k, n]) => `<option value="${k}" ${k === o.geschmack ? "selected" : ""}>${n}</option>`).join("")}</select>`, {
+      ok: "Speichern",
+      beiStart: el => {
+        el.querySelector(".f-art").addEventListener("change", e => { el.querySelector(".f-geschmack").style.display = e.target.value === "snack" ? "block" : "none"; });
+      },
+      absenden: async el => {
+        const art = wert(el, ".f-art");
+        const neu = { art };
+        if (art === "snack") neu.geschmack = wert(el, ".f-geschmack");
+        if (!await tun(db.from("orte").update(neu).eq("id", id))) return false;
+        this.art = art;
+        seiteAktualisieren();
+        return true;
+      }
+    });
+  },
+
   async loeschen(id) {
     if (!await frage("Diesen Ort löschen?", { ja: "Löschen", gefahr: true, details: "Bewertungen und Fotos gehen dabei auch verloren." })) return;
     if (await tun(db.from("orte").delete().eq("id", id))) seiteAktualisieren();
   },
 
   zufall() {
-    const kandidaten = this._daten.orte.filter(o => o.stadt === this.stadt && o.art === this.art);
-    if (!kandidaten.length) return toast(`Noch keine ${ORT_ARTEN[this.art][0]} in ${this.stadt} eingetragen.`, "fehler");
+    const alle = this._daten.orte.filter(o => o.stadt === this.stadt && o.art === this.art);
+    if (!alle.length) return toast(`Noch keine ${ORT_ARTEN[this.art][0]} in ${this.stadt} eingetragen.`, "fehler");
     const gewicht = o => !o.besucht ? 3 : Math.max(1, this.wertung(o) || 2);
-    const b = blatt(`<h3>Wohin gehen wir?</h3><div class="w-inhalt"></div>`);
+    const snack = this.art === "snack";
+    const FILTER = [["alle", "Egal"], ["suess", "Süß"], ["herzhaft", "Herzhaft"]];
+    const passend = f => alle.filter(o => f === "alle" || o.geschmack === f || o.geschmack === "beides");
+    let filter = "alle";
+    const b = blatt(`<h3>${snack ? "Worauf habt ihr Lust?" : "Wohin gehen wir?"}</h3>${snack ? '<div class="chips w-quellen"></div>' : ""}<div class="w-inhalt"></div>`);
     let runde = 0, letzte = null;
+    if (snack) b.el.querySelector(".w-quellen").addEventListener("click", e => {
+      const k = e.target.closest("[data-q]");
+      if (!k || k.dataset.q === filter) return;
+      filter = k.dataset.q;
+      letzte = null;
+      zeigen();
+    });
     const zeigen = async () => {
+      if (snack) b.el.querySelector(".w-quellen").innerHTML = FILTER.map(([k, n]) =>
+        `<button class="chip ${k === filter ? "aktiv" : ""}" data-q="${k}">${n} (${passend(k).length})</button>`).join("");
+      const kandidaten = passend(filter);
+      if (!kandidaten.length) {
+        runde++;
+        b.el.querySelector(".w-inhalt").innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">Noch keine ${filter === "suess" ? "süßen" : "herzhaften"} Snacks in ${schuetzen(this.stadt)}.</div>`;
+        return;
+      }
       const t = wuerfelZiehen(kandidaten, letzte, gewicht);
       letzte = t;
       const meine = ++runde;
       const inhalt = b.el.querySelector(".w-inhalt");
-      inhalt.innerHTML = wuerfelFeld("Heute geht's ins …");
+      inhalt.innerHTML = wuerfelFeld(snack ? "Heute holen wir uns was bei …" : this.art === "lunch" ? "Heute gehen wir lunchen im …" : "Heute geht's ins …");
       if (!await wuerfelDrehen(inhalt, kandidaten.map(o => o.name), t.name, () => meine === runde && b.hg.isConnected)) return;
       inhalt.querySelector(".w-mehr").innerHTML = `
-        <div class="meta">${t.kueche ? schuetzen(t.kueche) + " · " : ""}${t.besucht ? "Waren wir schon" : "Neu für euch"}</div>
+        <div class="meta">${t.kueche ? schuetzen(t.kueche) + " · " : ""}${snack && GESCHMACK[t.geschmack] ? GESCHMACK[t.geschmack] + " · " : ""}${t.besucht ? "Waren wir schon" : "Neu für euch"}</div>
         <a class="knopf zweit" style="margin-top:12px" href="${this.karten(t)}" target="_blank" rel="noopener"><i class="ti ti-route"></i> Route anzeigen</a>
         ${wuerfelKnoepfe('<i class="ti ti-check"></i> Passt!')}`;
       inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
