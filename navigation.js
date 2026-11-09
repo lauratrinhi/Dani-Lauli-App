@@ -32,7 +32,11 @@
   document.head.appendChild(stil);
 
   const original = id => document.querySelector(`[data-tab="${id}"]`);
-  const letzterReiter = {};
+  const merkSpeicher = {
+    lesen: (name, standard) => { try { return JSON.parse(sessionStorage.getItem(name)) ?? standard; } catch (e) { return standard; } },
+    schreiben: (name, wert) => { try { sessionStorage.setItem(name, JSON.stringify(wert)); } catch (e) {} }
+  };
+  const letzterReiter = merkSpeicher.lesen("navLetzte", {});
   let aktiverBereich = "home";
 
   function bereichVon(reiterId) {
@@ -54,6 +58,8 @@
     const bereich = bereichVon(reiterId);
     aktiverBereich = bereich.id;
     letzterReiter[bereich.id] = reiterId;
+    merkSpeicher.schreiben("navLetzte", letzterReiter);
+    merkSpeicher.schreiben("navAktuell", reiterId);
     knopf.click();
     document.querySelectorAll("#untenLeiste button").forEach(b => b.classList.toggle("aktiv", b.dataset.bereich === bereich.id));
     unterLeisteZeichnen(bereich, reiterId);
@@ -107,6 +113,19 @@
     });
 
     setInterval(punkteSpiegeln, 2000);
+
+    // Nach dem Neuladen dort weitermachen, wo man war
+    const vorher = merkSpeicher.lesen("navAktuell", "heute");
+    if (vorher && vorher !== "heute" && bereichVon(vorher)) {
+      const bereich = bereichVon(vorher);
+      document.querySelectorAll("#untenLeiste button").forEach(b => b.classList.toggle("aktiv", b.dataset.bereich === bereich.id));
+      let versuche = 0;
+      const zurueck = setInterval(() => {
+        versuche++;
+        if (original(vorher)) { clearInterval(zurueck); oeffnen(vorher); }
+        else if (versuche > 50) { clearInterval(zurueck); oeffnen("heute"); }
+      }, 100);
+    }
   }
 
   const warte = setInterval(() => {
