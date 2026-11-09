@@ -721,7 +721,7 @@ B.koch = {
     const gekocht = this.ansicht === "gekocht";
     const liste = this._daten.filter(r => !!r.gekocht === gekocht);
     setzeHtml(el, `
-      ${segmentHtml([["offen", `Wollen wir kochen (${this._daten.filter(r => !r.gekocht).length})`], ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`]], this.ansicht, "B.koch.wechsel")}
+      ${segmentHtml([["offen", `Rezepte (${this._daten.filter(r => !r.gekocht).length})`], ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`]], this.ansicht, "B.koch.wechsel")}
       <div class="reihe" style="margin-bottom:14px">
         <button class="knopf" onclick="B.koch.wuerfeln()"><i class="ti ti-dice-5"></i> Würfeln</button>
         <button class="knopf zweit" onclick="B.koch.neu()"><i class="ti ti-plus"></i> Neues Gericht</button>
@@ -778,7 +778,7 @@ B.koch = {
     const eigene = this._daten;
     const name = t => (t || "").trim().toLowerCase();
     return {
-      liste: { name: "Liste", eintraege: eigene.filter(r => !r.gekocht) },
+      liste: { name: "Rezepte", eintraege: eigene.filter(r => !r.gekocht) },
       gekocht: { name: "Gekocht", eintraege: eigene.filter(r => r.gekocht) },
       ideen: { name: "Ideen", eintraege: KOCH_IDEEN.filter(i => !eigene.some(r => name(r.titel) === name(i.titel))) }
     };
@@ -798,7 +798,7 @@ B.koch = {
       const inhalt = b.el.querySelector(".w-inhalt");
       const liste = quellen[this._quelle].eintraege;
       if (!liste.length) {
-        inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">${this._quelle === "gekocht" ? "Ihr habt noch nichts als gekocht markiert." : this._quelle === "liste" ? "Auf eurer Liste steht gerade nichts." : "Alle Ideen stehen schon in eurem Kochbuch."}</div>`;
+        inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">${this._quelle === "gekocht" ? "Ihr habt noch nichts als gekocht markiert." : this._quelle === "liste" ? "Bei Rezepte steht gerade nichts." : "Alle Ideen stehen schon in eurem Kochbuch."}</div>`;
         return;
       }
       let auswahl = liste;
@@ -833,7 +833,7 @@ B.koch = {
       const neu = this._quelle === "ideen";
       const link = wahl.link && /^https?:\/\//i.test(wahl.link) ? wahl.link : null;
       inhalt.querySelector(".w-mehr").innerHTML = `
-        <div class="meta">${neu ? "Neue Idee für euch" : this._quelle === "gekocht" ? "Habt ihr schon mal gekocht" : "Steht auf eurer Liste"}</div>
+        <div class="meta">${neu ? "Neue Idee für euch" : this._quelle === "gekocht" ? "Habt ihr schon mal gekocht" : "Aus euren Rezepten"}</div>
         ${wahl.rezept ? `<details style="margin-top:8px;text-align:left"><summary>Rezept anzeigen <i class="ti ti-chevron-down"></i></summary><div class="kommentar" style="white-space:pre-wrap;margin-top:8px">${schuetzen(wahl.rezept)}</div></details>` : ""}
         ${link ? `<a class="knopf zweit" style="margin-top:10px" href="${schuetzen(link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Zum Rezept</a>` : ""}
         <div class="reihe" style="margin-top:14px">
@@ -845,7 +845,7 @@ B.koch = {
           if (!await tun(db.from("rezepte").insert({ titel: wahl.titel, rezept: wahl.rezept }))) return;
           b.zu();
           this.ansicht = "offen";
-          toast("Steht jetzt auf eurer Liste ✓");
+          toast("Steht jetzt bei euren Rezepten ✓");
           seiteAktualisieren();
         } else {
           b.zu();
@@ -868,7 +868,7 @@ B.koch = {
     zeigen();
   },
 
-  async umschalten(id, war) { if (await tun(db.from("rezepte").update({ gekocht: !war }).eq("id", id))) { toast(war ? "Wieder auf der Liste" : "Lecker! ✓"); seiteAktualisieren(); } },
+  async umschalten(id, war) { if (await tun(db.from("rezepte").update({ gekocht: !war }).eq("id", id))) { toast(war ? "Wieder bei Rezepte" : "Lecker! ✓"); seiteAktualisieren(); } },
 
   async bild(id) {
     const [d] = await dateiWaehlen();
