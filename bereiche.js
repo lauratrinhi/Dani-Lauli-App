@@ -873,13 +873,13 @@ registriereSeite("rueckblick", {
     const von = new Date(j, m - 1, 1).toISOString(), bis = new Date(j, m, 1).toISOString();
     zeigeMitCache("rueckblick-" + monat, async () => {
       const [momente, essen, treffen, checks, abc] = await Promise.all([
-        hol(db.from("posts").select("datei_pfad, typ, erstellt_um").gte("erstellt_um", von).lt("erstellt_um", bis).order("erstellt_um")),
+        hol(db.from("posts").select("datei_pfad, weitere_pfade, typ, erstellt_um").gte("erstellt_um", von).lt("erstellt_um", bis).order("erstellt_um")),
         hol(db.from("essen").select("datei_pfad").gte("erstellt_um", von).lt("erstellt_um", bis).order("erstellt_um")),
         hol(db.from("besuche").select("*").gte("ankunft", von).lt("ankunft", bis).order("ankunft")),
         hol(db.from("checkins").select("user_id, wert").gte("erstellt_um", von).lt("erstellt_um", bis)),
         hol(db.from("abc_buchstaben").select("buchstabe, datum").eq("erledigt", true).gte("datum", von.slice(0, 10)).lt("datum", bis.slice(0, 10)))
       ]);
-      const bilder = [...momente.filter(x => x.typ === "foto"), ...essen].slice(0, 90).map(x => x.datei_pfad);
+      const bilder = [...momente.filter(x => x.typ === "foto").flatMap(x => [x.datei_pfad, ...(x.weitere_pfade || [])]), ...essen.map(x => x.datei_pfad)].slice(0, 90);
       await bildUrlsHolen(bilder);
       return { momente: momente.length, essen: essen.length, treffen, checks, abc, bilder };
     }, d => {
