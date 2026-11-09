@@ -8,108 +8,24 @@
 <title>Servus🥨</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
-<script>
-  // Nach dem Neuladen nicht kurz "Home" zeigen, wenn man vorher woanders war
-  try {
-    const vorher = JSON.parse(sessionStorage.getItem("navAktuell"));
-    if (vorher && vorher !== "heute") {
-      document.documentElement.classList.add("nav-zurueck");
-      setTimeout(() => document.documentElement.classList.remove("nav-zurueck"), 5000);
-    }
-  } catch (e) {}
-</script>
-<script src="navigation.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
 <style>
-  :root { --blau:#1f3a68; --blau-hell:#e8eef7; --text:#111827; --text2:#6b7280; --rand:#e5e7eb; --karte:#ffffff; --grund:#f6f7f9; --feld:#f3f4f6; --rot:#e11d48; }
-  * { -webkit-tap-highlight-color: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; margin: 0; background: var(--grund); color: var(--text); -webkit-font-smoothing: antialiased; }
-
-  header { display:flex; align-items:center; justify-content:space-between; max-width:500px; margin:auto; box-sizing:border-box;
-    padding: max(14px, env(safe-area-inset-top)) 20px 4px; font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
-  #glocke { width:40px; height:40px; border-radius:50%; background:var(--karte); border:0.5px solid var(--rand); color:var(--blau);
-    display:flex; align-items:center; justify-content:center; font-size:20px; padding:0; margin:0; }
-  #glocke.aus { color: var(--text2); }
-
-  main { padding: 8px 16px 16px; max-width: 500px; margin: auto; }
-  input, button, textarea, select { font-family: inherit; font-size: 16px; padding: 11px 12px; border-radius: 12px; width: 100%; box-sizing: border-box; margin-bottom: 8px; }
-  input, textarea, select { background: var(--feld); border: 1px solid transparent; color: var(--text); }
-  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--blau); background: var(--karte); }
-  button { background: var(--blau); color: white; border: none; font-weight: 600; font-size: 15px; transition: transform .1s, opacity .1s; }
-  button:active { transform: scale(.97); opacity: .85; }
-  button[style*="#f3f3f3"], button[style*="243, 243, 243"], .grau { background: var(--karte) !important; color: var(--text) !important; border: 1px solid var(--rand) !important; }
-  .grau { width: auto; }
-  summary { cursor: pointer; }
-
-  .post { background: var(--karte); border-radius: 16px; padding: 14px; margin-bottom: 14px; border: 0.5px solid var(--rand); box-shadow: none !important; }
+  body { font-family: -apple-system, sans-serif; margin: 0; background: #f4f6fb; color: #333; }
+  header { background: #1f3a68; color: white; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); text-align: center; font-size: 20px; font-weight: 600; }
+  main { padding: 16px; max-width: 500px; margin: auto; }
+  input, button, textarea, select { font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  button { background: #1f3a68; color: white; border: none; font-weight: 600; }
+  .post { background: white; border-radius: 16px; padding: 12px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
   .post img, .post video { width: 100%; border-radius: 12px; }
-  .meta { font-size: 13px; color: var(--text2); margin: 6px 0; }
-  .spaet { color: var(--rot); font-weight: 600; }
-  .kommentar { font-size: 14px; margin: 4px 0; line-height: 1.4; }
-  .versteckt { display: none !important; }
-  .nav-zurueck #app { visibility: hidden; }
-
-  /* Feed-Karten */
-  .feed-post { padding: 0; overflow: hidden; }
-  .feed-post > img, .feed-post > video { border-radius: 0; display: block; }
-  .feed-post > img.laedt { min-height: 280px; background: var(--feld); object-fit: cover; animation: puls 1.2s ease-in-out infinite; }
-  @keyframes puls { 50% { opacity: .55; } }
-  .kopf { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
-  .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--blau-hell); color: var(--blau); font-weight: 700; font-size: 14px;
-    display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-  .kopf .name { font-weight: 600; font-size: 15px; }
-  .kopf .zeit { margin-left: auto; font-size: 13px; color: var(--text2); text-align: right; }
-  .aktionen { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; }
-  .icon { width: auto; background: none !important; border: none !important; color: var(--text) !important; padding: 8px; margin: 0; font-size: 24px; line-height: 1; }
-  .icon.rot { color: var(--rot) !important; }
-  .icon.blau { color: var(--blau) !important; }
-  .chips { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-  .chip { width: auto; margin: 0; padding: 4px 9px; font-size: 13px; font-weight: 500; border-radius: 14px; background: var(--feld) !important; color: var(--text) !important; border: 1px solid transparent !important; }
-  .chip.meins { background: var(--blau-hell) !important; border-color: #c9d6ea !important; }
-  .emoji-wahl { display: flex; gap: 6px; padding: 4px 14px 0; flex-wrap: wrap; }
-  .emoji-wahl button { width: auto; margin: 0; padding: 6px 10px; font-size: 20px; border-radius: 20px; background: var(--feld) !important; color: var(--text) !important; }
-  .feed-post .kommentare { padding: 4px 14px 0; }
-  .kommentar-feld { display: flex; align-items: center; gap: 2px; background: var(--feld); border-radius: 22px; margin: 8px 12px 12px; padding: 0 4px 0 14px; }
-  .kommentar-feld input { background: none !important; border: none !important; margin: 0; padding: 10px 0; flex: 1; }
-  .kommentar-feld .icon { font-size: 21px; padding: 7px; }
-
-  /* Foto-Knopf */
-  #plusKnopf { position: fixed; right: 20px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 45; width: 58px; height: 58px; margin: 0; padding: 0;
-    border-radius: 50%; font-size: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(31,58,104,.35); }
-  body:not(.auf-home) #plusKnopf, body:has(#app.versteckt) #plusKnopf { display: none; }
-
-  /* Kurze Hinweise statt Pop-ups */
-  #toastBox { position: fixed; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 200; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding: 0 20px; }
-  .toast { background: #111827; color: #fff; padding: 11px 16px; border-radius: 14px; font-size: 14px; font-weight: 500; max-width: 420px; text-align: center;
-    box-shadow: 0 8px 24px rgba(0,0,0,.18); transition: opacity .3s, transform .3s; }
-  .toast.fehler { background: var(--rot); }
-  .toast.weg { opacity: 0; transform: translateY(8px); }
-
-  /* Unterreiter als iOS-Segmente */
-  body #unterLeiste { background: #e9ecf1; border-radius: 12px; padding: 3px; gap: 2px; margin: 2px 0 14px; top: 6px; }
-  body #unterLeiste button { background: transparent; color: var(--text2); border-radius: 10px; padding: 8px 4px; font-size: 14px; font-weight: 600; }
-  body #unterLeiste button.aktiv { background: var(--karte); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-  body #untenLeiste { background: rgba(255,255,255,.92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-
-  @media (prefers-color-scheme: dark) {
-    :root { --text:#f3f4f6; --text2:#9ca3af; --rand:#2d3748; --karte:#1a2130; --grund:#0f141c; --feld:#232b3a; --blau-hell:#24324a; }
-    header { color: var(--text); }
-    #glocke { color: #93c5fd; }
-    .toast { background: #f3f4f6; color: #111827; }
-    body #unterLeiste { background: #1a2130 !important; }
-    body #unterLeiste button { background: transparent !important; color: var(--text2) !important; }
-    body #unterLeiste button.aktiv { background: #2d3748 !important; color: var(--text) !important; }
-    body #untenLeiste { background: rgba(26,33,48,.92) !important; }
-    .icon.blau { color: #93c5fd !important; }
-    .chip.meins { border-color: #3b4f70 !important; }
-  }
+  .meta { font-size: 13px; color: #888; margin: 6px 0; }
+  .spaet { color: #c0392b; font-weight: 600; }
+  .emojis button { width: auto; background: #f3f3f3; color: #333; margin-right: 6px; padding: 6px 10px; }
+  .kommentar { font-size: 14px; margin: 4px 0; }
+  .versteckt { display: none; }
+  .grau { width: auto; background: #f3f3f3; color: #333; }
 </style>
 </head>
 <body>
-<header>
-  <span id="titel">Servus</span>
-  <button id="glocke" class="aus" onclick="pushUmschalten()" aria-label="Benachrichtigungen"><i class="ti ti-bell-off"></i></button>
-</header>
+<header>Servus 🥨</header>
 <main>
   <!-- ===== Login ===== -->
   <div id="login">
@@ -149,14 +65,15 @@
     </div>
 
     <!-- Foto / Video & Benachrichtigungen -->
+    <button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button>
     <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
+    <button id="pushKnopf" onclick="pushUmschalten()">🔔 Benachrichtigungen aktivieren</button>
+    <div id="status" class="meta"></div>
 
     <!-- Feed -->
     <div id="feed"></div>
   </div>
 </main>
-
-<button id="plusKnopf" onclick="document.getElementById('datei').click()" aria-label="Foto oder Video aufnehmen"><i class="ti ti-camera"></i></button>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -175,30 +92,6 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let ich = null;
 let leute = [];
 
-// Kurze Hinweise unten statt Pop-up-Fenster
-function toast(text, art = "info") {
-  let box = document.getElementById("toastBox");
-  if (!box) { box = document.createElement("div"); box.id = "toastBox"; document.body.appendChild(box); }
-  const t = document.createElement("div");
-  t.className = "toast " + art;
-  t.textContent = text;
-  box.appendChild(t);
-  const dauer = Math.min(6000, 1800 + String(text).length * 45);
-  setTimeout(() => t.classList.add("weg"), dauer);
-  setTimeout(() => t.remove(), dauer + 400);
-}
-window.alert = text => toast(String(text), /fehl|fehler|nicht|bitte|zu groß|höchstens/i.test(String(text)) ? "fehler" : "info");
-
-function wieLange(datum) {
-  const s = (Date.now() - new Date(datum)) / 1000;
-  if (s < 60) return "gerade eben";
-  if (s < 3600) return `vor ${Math.floor(s / 60)} Min.`;
-  if (s < 86400) return `vor ${Math.floor(s / 3600)} Std.`;
-  if (s < 172800) return "gestern";
-  if (s < 604800) return `vor ${Math.floor(s / 86400)} Tagen`;
-  return new Date(datum).toLocaleDateString("de-DE", { day: "numeric", month: "short" });
-}
-
 window.addEventListener("error", e => alert("Fehler: " + e.message));
 window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
 
@@ -214,14 +107,7 @@ function nameVon(id) {
 }
 
 async function leuteLaden() {
-  if (!leute.length) leute = speicherLesen("leute", []);
-  if (window.leuteGeladen) return;
-  const { data } = await db.from("personen").select("user_id, name");
-  if (data && data.length) {
-    leute = data;
-    speicherSchreiben("leute", data);
-    window.leuteGeladen = true;
-  }
+  if (!leute.length) leute = (await db.from("personen").select("user_id, name")).data || [];
 }
 
 // Verkleinert ein Bild (z. B. Handyfoto) und gibt es als Blob zurück
@@ -273,6 +159,7 @@ async function einloggen() {
 async function zeigeApp() {
   document.getElementById("login").classList.add("versteckt");
   document.getElementById("app").classList.remove("versteckt");
+  await leuteLaden();
   ladeFeed();
   ladeBesuch();
   ladeNotizen();
@@ -288,6 +175,7 @@ document.addEventListener("visibilitychange", () => {
    ========================================================= */
 async function hochladen(datei) {
   if (!datei) return;
+  const status = document.getElementById("status");
   const feld = document.getElementById("datei");
   const istVideo = datei.type.startsWith("video");
 
@@ -304,7 +192,7 @@ async function hochladen(datei) {
       }
     }
 
-    toast("Wird hochgeladen …");
+    status.textContent = "Wird hochgeladen …";
 
     // Zu spät? (mehr als 2 Minuten nach dem heutigen Alarm)
     const { data: alarme } = await db.from("alarme").select("*").order("ausgeloest_um", { ascending: false }).limit(1);
@@ -324,15 +212,16 @@ async function hochladen(datei) {
       typInfo = { contentType: "image/jpeg" };
     }
     const pfad = `${ich.id}/${Date.now()}.${endung}`;
-    const { error: fehler } = await db.storage.from("medien").upload(pfad, inhalt, { ...typInfo, cacheControl: "31536000" });
+    const { error: fehler } = await db.storage.from("medien").upload(pfad, inhalt, typInfo);
     if (fehler) throw fehler;
 
     const { error } = await db.from("posts").insert({ datei_pfad: pfad, typ: istVideo ? "video" : "foto", alarm_id: alarmId, zu_spaet: zuSpaet });
     if (error) throw error;
 
-    toast("Gepostet ✓");
+    status.textContent = "Gepostet! ✅";
     ladeFeed();
   } catch (e) {
+    status.textContent = "";
     alert("Upload fehlgeschlagen: " + e.message);
   } finally {
     feld.value = "";
@@ -342,125 +231,58 @@ async function hochladen(datei) {
 /* =========================================================
    Feed, Reaktionen & Kommentare
    ========================================================= */
-// Bild-Links und letzten Feed auf dem Handy merken, damit nach dem Neuladen sofort etwas da ist
-function speicherLesen(name, standard) {
-  try { return JSON.parse(localStorage.getItem(name)) ?? standard; } catch (e) { return standard; }
-}
-function speicherSchreiben(name, wert) {
-  try { localStorage.setItem(name, JSON.stringify(wert)); } catch (e) {}
-}
+async function ladeFeed() {
+  await leuteLaden();
+  const { data: posts } = await db.from("posts")
+    .select("*, reaktionen(*), kommentare(*)")
+    .order("erstellt_um", { ascending: false }).limit(30);
 
-function feedLinks() {
-  if (!window.feedLinksSpeicher) {
-    const gespeichert = speicherLesen("feedLinks", {});
-    const jetzt = Date.now();
-    window.feedLinksSpeicher = {};
-    for (const [pfad, eintrag] of Object.entries(gespeichert)) {
-      if (eintrag && eintrag.bis > jetzt) window.feedLinksSpeicher[pfad] = eintrag;
-    }
+  // Bild-Links nur einmal holen und merken
+  const links = window.feedLinks = window.feedLinks || {};
+  const fehlend = (posts || []).map(p => p.datei_pfad).filter(x => !links[x]);
+  if (fehlend.length) {
+    const { data: neu } = await db.storage.from("medien").createSignedUrls(fehlend, 86400);
+    (neu || []).forEach(l => { if (l.signedUrl) links[l.path] = l.signedUrl; });
   }
-  return window.feedLinksSpeicher;
-}
 
-function feedZeichnen(posts) {
-  const links = feedLinks();
   const feed = document.createDocumentFragment();
   for (const p of posts || []) {
-    const url = links[p.datei_pfad]?.url || "";
-    const name = nameVon(p.user_id);
+    const url = links[p.datei_pfad] || "";
+    const zeit = new Date(p.erstellt_um).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
     const medium = p.typ === "video"
-      ? `<video src="${url}" controls playsinline preload="metadata"></video>`
-      : `<img src="${url}" class="laedt" decoding="async" onload="this.classList.remove('laedt')">`;
+      ? `<video src="${url}" controls playsinline></video>`
+      : `<img src="${url}">`;
 
-    const reaktionen = p.reaktionen || [];
-    const herzVonMir = reaktionen.some(r => r.emoji === "❤️" && r.user_id === ich.id);
-    const chips = [...new Set(reaktionen.map(r => r.emoji))].map(e => {
-      const alle = reaktionen.filter(r => r.emoji === e);
-      const meins = alle.some(r => r.user_id === ich.id);
-      return `<button class="chip ${meins ? "meins" : ""}" onclick="reagieren(${p.id}, '${e}')">${e} ${alle.length}</button>`;
-    }).join("");
+    const zaehler = [...new Set([...EMOJIS, ...p.reaktionen.map(r => r.emoji)])].map(e => {
+      const anzahl = p.reaktionen.filter(r => r.emoji === e).length;
+      return `<button onclick="reagieren(${p.id}, '${e}')">${e} ${anzahl || ""}</button>`;
+    }).join("") + `<button onclick="eigenesEmoji(${p.id})">➕</button>`;
 
-    const kommentare = (p.kommentare || []).slice()
+    const kommentare = p.kommentare
       .sort((a, b) => new Date(a.erstellt_um) - new Date(b.erstellt_um))
       .map(k => `<div class="kommentar"><b>${schuetzen(nameVon(k.user_id))}</b> ${k.gif_url
-        ? `<br><img src="${schuetzen(k.gif_url)}" style="width:55%;border-radius:12px;margin-top:4px">`
+        ? `<br><img src="${schuetzen(k.gif_url)}" style="width:60%;border-radius:10px;margin-top:4px">`
         : schuetzen(k.text)}</div>`)
       .join("");
 
     const div = document.createElement("div");
-    div.className = "post feed-post";
+    div.className = "post";
     div.innerHTML = `
-      <div class="kopf">
-        <div class="avatar">${schuetzen(name.charAt(0).toUpperCase())}</div>
-        <div class="name">${schuetzen(name)}</div>
-        <div class="zeit">${wieLange(p.erstellt_um)}${p.zu_spaet ? '<br><span class="spaet">zu spät</span>' : ""}</div>
-      </div>
       ${medium}
-      <div class="aktionen">
-        <button class="icon ${herzVonMir ? "rot" : ""}" onclick="reagieren(${p.id}, '❤️')" aria-label="Gefällt mir"><i class="ti ti-heart"></i></button>
-        <button class="icon" onclick="document.getElementById('k${p.id}').focus()" aria-label="Kommentieren"><i class="ti ti-message-circle"></i></button>
-        <button class="icon" onclick="document.getElementById('ew${p.id}').classList.toggle('versteckt')" aria-label="Reagieren"><i class="ti ti-mood-smile"></i></button>
-        <div class="chips">${chips}</div>
-      </div>
-      <div class="emoji-wahl versteckt" id="ew${p.id}">
-        ${EMOJIS.map(e => `<button onclick="reagieren(${p.id}, '${e}')">${e}</button>`).join("")}
-        <button onclick="eigenesEmoji(${p.id})" aria-label="Anderes Emoji">＋</button>
-      </div>
-      ${kommentare ? `<div class="kommentare">${kommentare}</div>` : ""}
-      <div class="kommentar-feld">
-        <input id="k${p.id}" placeholder="Kommentieren …" enterkeyhint="send" onkeydown="if (event.key === 'Enter') kommentieren(${p.id})">
-        <button class="icon" onclick="gifSuchen(${p.id})" aria-label="GIF oder Sticker"><i class="ti ti-gif"></i></button>
-        <button class="icon blau" onclick="kommentieren(${p.id})" aria-label="Senden"><i class="ti ti-send"></i></button>
+      <div class="meta">${schuetzen(nameVon(p.user_id))} · ${zeit} ${p.zu_spaet ? '<span class="spaet">· zu spät ⏰</span>' : ""}</div>
+      <div class="emojis">${zaehler}</div>
+      ${kommentare}
+      <input id="k${p.id}" placeholder="Kommentar schreiben …" enterkeyhint="send" onkeydown="if (event.key === 'Enter') kommentieren(${p.id})">
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button onclick="kommentieren(${p.id})">Senden</button>
+        <button onclick="gifSuchen(${p.id})" class="grau">GIF 😺</button>
       </div>`;
     feed.appendChild(div);
   }
 
-  // Getippten Kommentar nicht verlieren, wenn der Feed neu gezeichnet wird
-  const offen = {};
-  document.querySelectorAll('#feed input[id^="k"]').forEach(f => { if (f.value) offen[f.id] = f.value; });
-  const fokus = document.activeElement?.id;
-
   const y = window.scrollY;
   document.getElementById("feed").replaceChildren(feed);
   window.scrollTo(0, y);
-
-  for (const [id, wert] of Object.entries(offen)) {
-    const f = document.getElementById(id);
-    if (f) f.value = wert;
-  }
-  if (fokus && fokus.startsWith("k")) document.getElementById(fokus)?.focus();
-}
-
-let feedGezeichnet = false;
-
-async function ladeFeed() {
-  // 1. Sofort den zuletzt bekannten Feed anzeigen
-  if (!feedGezeichnet) {
-    if (!leute.length) leute = speicherLesen("leute", []);
-    const alt = speicherLesen("feedCache", null);
-    if (alt) { feedZeichnen(alt); feedGezeichnet = true; }
-  }
-
-  // 2. Aktuelle Daten holen (Namen und Posts gleichzeitig)
-  const [, antwort] = await Promise.all([
-    leuteLaden(),
-    db.from("posts").select("*, reaktionen(*), kommentare(*)").order("erstellt_um", { ascending: false }).limit(30)
-  ]);
-  const posts = antwort.data || [];
-
-  // 3. Nur für neue Bilder Links holen, alte wiederverwenden (dann kommen sie aus dem Handy-Speicher)
-  const links = feedLinks();
-  const fehlend = posts.map(p => p.datei_pfad).filter(x => !links[x]);
-  if (fehlend.length) {
-    const { data: neu } = await db.storage.from("medien").createSignedUrls(fehlend, 7 * 86400);
-    const bis = Date.now() + 6 * 86400 * 1000;
-    (neu || []).forEach(l => { if (l.signedUrl) links[l.path] = { url: l.signedUrl, bis }; });
-    speicherSchreiben("feedLinks", links);
-  }
-
-  speicherSchreiben("feedCache", posts);
-  feedZeichnen(posts);
-  feedGezeichnet = true;
 }
 
 async function reagieren(postId, emoji) {
@@ -796,25 +618,26 @@ async function pushAktivieren() {
   }
   const { error } = await db.from("push_abos").upsert({ abo: abo.toJSON() }, { onConflict: "user_id,abo", ignoreDuplicates: true });
   if (error) return alert("Fehler: " + error.message);
-  toast("Benachrichtigungen an ✓");
+  alert("Benachrichtigungen sind aktiv! 🔔");
 }
 
 async function pushStatusZeigen() {
-  const glocke = document.getElementById("glocke");
-  if (!glocke) return;
+  const knopf = document.getElementById("pushKnopf");
+  if (!knopf) return;
   let aktiv = false;
   if ("serviceWorker" in navigator && "PushManager" in window && Notification.permission === "granted") {
     const reg = await navigator.serviceWorker.getRegistration();
     aktiv = !!(reg && await reg.pushManager.getSubscription());
   }
-  glocke.dataset.aktiv = aktiv ? "1" : "";
-  glocke.classList.toggle("aus", !aktiv);
-  glocke.innerHTML = `<i class="ti ${aktiv ? "ti-bell" : "ti-bell-off"}"></i>`;
+  knopf.dataset.aktiv = aktiv ? "1" : "";
+  knopf.textContent = aktiv ? "🔔 Benachrichtigungen sind an" : "🔕 Benachrichtigungen aktivieren";
+  knopf.style.background = aktiv ? "#f3f3f3" : "";
+  knopf.style.color = aktiv ? "#333" : "";
 }
 
 async function pushUmschalten() {
-  const glocke = document.getElementById("glocke");
-  if (glocke.dataset.aktiv) {
+  const knopf = document.getElementById("pushKnopf");
+  if (knopf.dataset.aktiv) {
     if (!confirm("Benachrichtigungen auf diesem Handy ausschalten?")) return;
     const reg = await navigator.serviceWorker.getRegistration();
     const abo = reg && await reg.pushManager.getSubscription();
@@ -822,37 +645,11 @@ async function pushUmschalten() {
       await db.from("push_abos").delete().eq("abo->>endpoint", abo.endpoint);
       await abo.unsubscribe();
     }
-    toast("Benachrichtigungen aus");
   } else {
     await pushAktivieren();
   }
   pushStatusZeigen();
 }
-
-/* =========================================================
-   Überschrift, Foto-Knopf & einheitliche Icons
-   ========================================================= */
-setInterval(() => {
-  const bereich = document.querySelector("#untenLeiste .aktiv")?.textContent?.trim() || "Home";
-  const titel = bereich === "Home" ? "Servus" : bereich;
-  const el = document.getElementById("titel");
-  if (el && el.textContent !== titel) el.textContent = titel;
-  document.body.classList.toggle("auf-home", bereich === "Home");
-}, 200);
-
-// Emoji-Knöpfe in allen Bereichen durch schlichte Icons ersetzen
-const ICONS = { "🗑️": "trash", "🗑": "trash", "📷": "camera-plus", "✏️": "pencil", "✏": "pencil", "✕": "x", "🏁": "flag-check", "⭐": "star", "✅": "check" };
-function iconsErsetzen(wurzel = document.body) {
-  wurzel.querySelectorAll("button").forEach(b => {
-    if (b.children.length || b.classList.contains("chip")) return;
-    const name = ICONS[b.textContent.trim()];
-    if (!name || b.closest(".emoji-wahl, .wl-sterne, .o-sterne")) return;
-    b.innerHTML = `<i class="ti ti-${name}" style="font-size:19px;vertical-align:-3px"></i>`;
-  });
-}
-let iconTimer;
-new MutationObserver(() => { clearTimeout(iconTimer); iconTimer = setTimeout(() => iconsErsetzen(), 50); })
-  .observe(document.documentElement, { childList: true, subtree: true });
 
 /* =========================================================
    Los geht's
@@ -863,8 +660,6 @@ start();
 <script src="abc.js"></script>
 <script src="wuensche.js"></script>
 <script src="kochbuch.js"></script>
-<script src="watchlist.js"></script>
-<script src="orte.js"></script>
 <script src="bedienung.js"></script>
 </body>
 </html>
