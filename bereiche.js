@@ -701,6 +701,19 @@ registriereSeite("kochbuch", {
   }
 });
 
+
+const KOCH_IDEEN = [
+  { titel: "Spaghetti Carbonara", rezept: "Für 2: 250 g Spaghetti, 100 g Guanciale oder Speck, 2 Eier + 1 Eigelb, 50 g Pecorino oder Parmesan, Pfeffer\n\n1. Spaghetti in Salzwasser kochen, eine Tasse Nudelwasser aufheben.\n2. Speck in der Pfanne knusprig braten.\n3. Eier mit geriebenem Käse und viel Pfeffer verquirlen.\n4. Herd aus, Nudeln zum Speck geben, Eiermasse und etwas Nudelwasser unterrühren, bis es cremig ist." },
+  { titel: "Rotes Linsen-Curry", rezept: "Für 2: 150 g rote Linsen, 1 Dose Kokosmilch, 1 Dose gehackte Tomaten, 1 Zwiebel, 2 Knoblauchzehen, 1 Stück Ingwer, 2 TL Currypulver, Spinat, Reis\n\n1. Zwiebel, Knoblauch und Ingwer in Öl anbraten, Curry kurz mitrösten.\n2. Linsen, Tomaten und Kokosmilch dazu, 15 Minuten köcheln.\n3. Spinat unterheben, mit Salz und Limette abschmecken. Dazu Reis." },
+  { titel: "Ofengemüse mit Feta", rezept: "Für 2: 1 Süßkartoffel, 1 Paprika, 1 Zucchini, 1 rote Zwiebel, 1 Dose Kichererbsen, 200 g Feta, Olivenöl, Paprikapulver, Thymian\n\n1. Ofen auf 200 °C Umluft vorheizen.\n2. Gemüse würfeln, mit Kichererbsen, Öl und Gewürzen aufs Blech.\n3. Feta in die Mitte legen, 30 Minuten backen. Mit Joghurt-Dip servieren." },
+  { titel: "Käsespätzle", rezept: "Für 2: 400 g Spätzle (frisch oder aus dem Kühlregal), 150 g Bergkäse, 2 Zwiebeln, Butter, Schnittlauch\n\n1. Zwiebeln in Ringe schneiden und in Butter goldbraun rösten.\n2. Spätzle in einer Pfanne mit Butter erhitzen.\n3. Käse lagenweise unterheben, bis er schmilzt.\n4. Mit Röstzwiebeln und Schnittlauch servieren." },
+  { titel: "Shakshuka", rezept: "Für 2: 4 Eier, 1 Dose gehackte Tomaten, 1 Paprika, 1 Zwiebel, 2 Knoblauchzehen, Kreuzkümmel, Paprikapulver, Feta, Brot\n\n1. Zwiebel, Paprika und Knoblauch anbraten, Gewürze dazu.\n2. Tomaten dazu, 10 Minuten einköcheln.\n3. Mulden machen, Eier hineinschlagen, mit Deckel ca. 6 Minuten stocken lassen.\n4. Mit Feta und Brot direkt aus der Pfanne essen." },
+  { titel: "Gebratener Reis mit Ei", rezept: "Für 2: 2 Tassen gekochter Reis (am besten vom Vortag), 2 Eier, 1 Karotte, 1 Handvoll Erbsen, 2 Frühlingszwiebeln, Sojasauce, Sesamöl\n\n1. Gemüse klein schneiden und im Wok scharf anbraten.\n2. Reis dazu und mitbraten, bis er leicht knusprig ist.\n3. Reis zur Seite schieben, Eier in der Lücke verrühren und unterheben.\n4. Mit Sojasauce, Sesamöl und Frühlingszwiebeln abschmecken." },
+  { titel: "Kürbissuppe", rezept: "Für 2: 1 kleiner Hokkaido, 1 Zwiebel, 1 Stück Ingwer, 500 ml Gemüsebrühe, 200 ml Kokosmilch, Kürbiskerne\n\n1. Kürbis mit Schale würfeln, Zwiebel und Ingwer anschwitzen.\n2. Kürbis dazu, mit Brühe aufgießen, 20 Minuten kochen.\n3. Kokosmilch dazu und fein pürieren.\n4. Mit Salz, Pfeffer und gerösteten Kürbiskernen servieren." },
+  { titel: "Hähnchen-Wraps", rezept: "Für 2: 300 g Hähnchenbrust, 4 Wraps, 1 Avocado, Salat, Tomaten, Mais, Joghurt oder Sour Cream, Paprikapulver, Limette\n\n1. Hähnchen in Streifen schneiden, mit Paprika und Salz würzen und anbraten.\n2. Avocado mit Limette und Salz zerdrücken.\n3. Wraps kurz in der Pfanne erwärmen.\n4. Alles einfüllen, einrollen und genießen." },
+  { titel: "Kaiserschmarrn", rezept: "Für 2: 4 Eier, 125 g Mehl, 250 ml Milch, 1 Prise Salz, 2 EL Zucker, Rosinen (optional), Butter, Puderzucker, Apfelmus\n\n1. Eier trennen, Eiweiß mit Salz steif schlagen.\n2. Eigelb, Mehl, Milch und Zucker glatt rühren, Eischnee unterheben.\n3. Teig in reichlich Butter backen, wenden, mit zwei Gabeln zerreißen.\n4. Etwas Zucker darüber karamellisieren, mit Puderzucker und Apfelmus servieren." }
+];
+
 B.koch = {
   _daten: [],
   ansicht: "offen",
@@ -709,8 +722,11 @@ B.koch = {
     const liste = this._daten.filter(r => !!r.gekocht === gekocht);
     setzeHtml(el, `
       ${segmentHtml([["offen", `Wollen wir kochen (${this._daten.filter(r => !r.gekocht).length})`], ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`]], this.ansicht, "B.koch.wechsel")}
-      ${mehrKnopf("B.koch.neu()", "Neues Gericht")}
-      ${liste.map(r => `<div class="karte" style="padding:0;overflow:hidden">
+      <div class="reihe" style="margin-bottom:14px">
+        <button class="knopf" onclick="B.koch.wuerfeln()"><i class="ti ti-dice-5"></i> Würfeln</button>
+        <button class="knopf zweit" onclick="B.koch.neu()"><i class="ti ti-plus"></i> Neues Gericht</button>
+      </div>
+      ${liste.map(r => `<div class="karte" id="rezept-${r.id}" style="padding:0;overflow:hidden">
         ${r.bild_pfad ? bildTag(r.bild_pfad, 'style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block"') : ""}
         <div style="padding:14px 16px 16px">
           <div style="font-weight:700;font-size:18px">${schuetzen(r.titel)}</div>
@@ -753,6 +769,103 @@ B.koch = {
         } catch (e) { fehler(e); return false; }
       }
     });
+  },
+
+  /* ---- Würfeln: Was kochen wir heute? ---- */
+  _quelle: null,
+  _letzte: null,
+  quellen() {
+    const eigene = this._daten;
+    const name = t => (t || "").trim().toLowerCase();
+    return {
+      liste: { name: "Liste", eintraege: eigene.filter(r => !r.gekocht) },
+      gekocht: { name: "Gekocht", eintraege: eigene.filter(r => r.gekocht) },
+      ideen: { name: "Ideen", eintraege: KOCH_IDEEN.filter(i => !eigene.some(r => name(r.titel) === name(i.titel))) }
+    };
+  },
+
+  wuerfeln() {
+    const q = this.quellen();
+    if (!this._quelle || !q[this._quelle].eintraege.length)
+      this._quelle = ["liste", "gekocht", "ideen"].find(k => q[k].eintraege.length) || "ideen";
+    const b = blatt(`<h3>Was kochen wir heute?</h3><div class="chips w-quellen"></div><div class="w-inhalt"></div>`);
+    let runde = 0;
+
+    const zeigen = async () => {
+      const quellen = this.quellen();
+      b.el.querySelector(".w-quellen").innerHTML = Object.entries(quellen).map(([k, v]) =>
+        `<button class="chip ${k === this._quelle ? "aktiv" : ""}" data-q="${k}">${v.name} (${v.eintraege.length})</button>`).join("");
+      const inhalt = b.el.querySelector(".w-inhalt");
+      const liste = quellen[this._quelle].eintraege;
+      if (!liste.length) {
+        inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">${this._quelle === "gekocht" ? "Ihr habt noch nichts als gekocht markiert." : this._quelle === "liste" ? "Auf eurer Liste steht gerade nichts." : "Alle Ideen stehen schon in eurem Kochbuch."}</div>`;
+        return;
+      }
+      let auswahl = liste;
+      if (liste.length > 1) auswahl = liste.filter(r => r.titel !== this._letzte);
+      const wahl = auswahl[Math.floor(Math.random() * auswahl.length)];
+      this._letzte = wahl.titel;
+      const meine = ++runde;
+
+      inhalt.innerHTML = `
+        <div style="text-align:center;padding:8px 0 4px">
+          <i class="ti ti-dice-5 w-wuerfel" style="font-size:44px;color:var(--blau-text);display:inline-block;transition:transform .12s"></i>
+          <div class="meta">Heute kochen wir …</div>
+          <div class="w-name" style="font-weight:800;font-size:26px;margin:4px 0;min-height:34px"></div>
+          <div class="w-mehr"></div>
+        </div>`;
+      const nameEl = inhalt.querySelector(".w-name");
+      const wuerfel = inhalt.querySelector(".w-wuerfel");
+      if (liste.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        let pause = 50;
+        for (let i = 0; i < 12; i++) {
+          if (meine !== runde || !b.hg.isConnected) return;
+          nameEl.textContent = liste[Math.floor(Math.random() * liste.length)].titel;
+          wuerfel.style.transform = `rotate(${(i + 1) * 30}deg)`;
+          await new Promise(r => setTimeout(r, pause));
+          pause *= 1.17;
+        }
+        wuerfel.style.transform = "";
+      }
+      if (meine !== runde || !b.hg.isConnected) return;
+      nameEl.textContent = wahl.titel;
+
+      const neu = this._quelle === "ideen";
+      const link = wahl.link && /^https?:\/\//i.test(wahl.link) ? wahl.link : null;
+      inhalt.querySelector(".w-mehr").innerHTML = `
+        <div class="meta">${neu ? "Neue Idee für euch" : this._quelle === "gekocht" ? "Habt ihr schon mal gekocht" : "Steht auf eurer Liste"}</div>
+        ${wahl.rezept ? `<details style="margin-top:8px;text-align:left"><summary>Rezept anzeigen <i class="ti ti-chevron-down"></i></summary><div class="kommentar" style="white-space:pre-wrap;margin-top:8px">${schuetzen(wahl.rezept)}</div></details>` : ""}
+        ${link ? `<a class="knopf zweit" style="margin-top:10px" href="${schuetzen(link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Zum Rezept</a>` : ""}
+        <div class="reihe" style="margin-top:14px">
+          <button class="knopf zweit" data-a="nochmal"><i class="ti ti-refresh"></i> Nochmal</button>
+          <button class="knopf" data-a="ok"><i class="ti ti-chef-hat"></i> Machen wir!</button>
+        </div>`;
+      inhalt.querySelector('[data-a="ok"]').onclick = async () => {
+        if (neu) {
+          if (!await tun(db.from("rezepte").insert({ titel: wahl.titel, rezept: wahl.rezept }))) return;
+          b.zu();
+          this.ansicht = "offen";
+          toast("Steht jetzt auf eurer Liste ✓");
+          seiteAktualisieren();
+        } else {
+          b.zu();
+          this.ansicht = wahl.gekocht ? "gekocht" : "offen";
+          this.zeichnen(document.getElementById("seite-kochbuch"));
+          toast("Guten Appetit!");
+          setTimeout(() => document.getElementById("rezept-" + wahl.id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+        }
+      };
+      inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
+    };
+
+    b.el.querySelector(".w-quellen").addEventListener("click", e => {
+      const k = e.target.closest("[data-q]");
+      if (!k || k.dataset.q === this._quelle) return;
+      this._quelle = k.dataset.q;
+      this._letzte = null;
+      zeigen();
+    });
+    zeigen();
   },
 
   async umschalten(id, war) { if (await tun(db.from("rezepte").update({ gekocht: !war }).eq("id", id))) { toast(war ? "Wieder auf der Liste" : "Lecker! ✓"); seiteAktualisieren(); } },
