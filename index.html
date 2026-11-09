@@ -106,6 +106,14 @@
   /* Segmente & Chips */
   .segment { display: flex; background: var(--feld); border-radius: 12px; padding: 3px; gap: 2px; margin-bottom: 14px; }
   .segment button { flex: 1; border: none; background: none; color: var(--text2); padding: 8px 4px; border-radius: 10px; font-size: 14px; font-weight: 600; margin: 0; }
+  .ort-arten { display: grid; grid-template-columns: 1.35fr 1fr 1fr 1fr 1fr; gap: 5px; margin-bottom: 14px; }
+  .ort-arten button { display: flex; flex-direction: column; align-items: center; gap: 2px; border: 1px solid var(--rand); background: var(--karte); color: var(--text2);
+    border-radius: 12px; padding: 8px 2px 6px; margin: 0; font-size: 12px; font-weight: 600; min-width: 0; }
+  .ort-arten button i { font-size: 22px; }
+  .ort-arten button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; letter-spacing: -0.2px; }
+  .ort-arten button small { font-size: 11px; font-weight: 500; color: var(--text3); }
+  .ort-arten button.aktiv { background: var(--blau); border-color: var(--blau); color: #fff; }
+  .ort-arten button.aktiv small { color: rgba(255,255,255,.75); }
   .segment button.aktiv { background: var(--karte); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin-bottom: 12px; }
   .chips::-webkit-scrollbar { display: none; }
