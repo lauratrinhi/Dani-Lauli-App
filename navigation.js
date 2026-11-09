@@ -116,14 +116,16 @@
 
     // Nach dem Neuladen dort weitermachen, wo man war
     const vorher = merkSpeicher.lesen("navAktuell", "heute");
+    const zeigen = () => document.documentElement.classList.remove("nav-zurueck");
+    if (!(vorher && vorher !== "heute" && bereichVon(vorher))) zeigen();
     if (vorher && vorher !== "heute" && bereichVon(vorher)) {
       const bereich = bereichVon(vorher);
       document.querySelectorAll("#untenLeiste button").forEach(b => b.classList.toggle("aktiv", b.dataset.bereich === bereich.id));
       let versuche = 0;
       const zurueck = setInterval(() => {
         versuche++;
-        if (original(vorher)) { clearInterval(zurueck); oeffnen(vorher); }
-        else if (versuche > 50) { clearInterval(zurueck); oeffnen("heute"); }
+        if (original(vorher)) { clearInterval(zurueck); oeffnen(vorher); requestAnimationFrame(zeigen); }
+        else if (versuche > 50) { clearInterval(zurueck); oeffnen("heute"); zeigen(); }
       }, 100);
     }
   }
