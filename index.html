@@ -6,72 +6,149 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Servus🥨">
 <title>Servus🥨</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
 <style>
   body { font-family: -apple-system, sans-serif; margin: 0; background: #f4f6fb; color: #333; }
   header { background: #1f3a68; color: white; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); text-align: center; font-size: 20px; font-weight: 600; }
   main { padding: 16px; max-width: 500px; margin: auto; }
-  input, button, textarea { font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  input, button, textarea, select { font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; margin-bottom: 8px; }
   button { background: #1f3a68; color: white; border: none; font-weight: 600; }
   .post { background: white; border-radius: 16px; padding: 12px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
   .post img, .post video { width: 100%; border-radius: 12px; }
+  .post > img.laedt { min-height: 260px; background: #e5e7eb; object-fit: cover; }
   .meta { font-size: 13px; color: #888; margin: 6px 0; }
   .spaet { color: #c0392b; font-weight: 600; }
   .emojis button { width: auto; background: #f3f3f3; color: #333; margin-right: 6px; padding: 6px 10px; }
   .kommentar { font-size: 14px; margin: 4px 0; }
   .versteckt { display: none; }
+  .grau { width: auto; background: #f3f3f3; color: #333; }
 </style>
 </head>
 <body>
-<header> Servus 🥨 </header>
+<header>Servus 🥨</header>
 <main>
+  <!-- ===== Login ===== -->
   <div id="login">
     <input id="email" type="email" placeholder="E-Mail">
     <input id="passwort" type="password" placeholder="Passwort">
     <button onclick="einloggen()">Einloggen</button>
   </div>
 
+  <!-- ===== App ===== -->
   <div id="app" class="versteckt">
+
+    <!-- Countdown & Treffen -->
     <div class="post">
-  <div id="countdown" style="font-size:22px;font-weight:600;text-align:center">Noch kein Treffen geplant</div>
-  <div id="besuchInfo" class="meta" style="text-align:center"></div>
-  <details>
-    <summary class="meta">Nächstes Treffen eintragen</summary>
-    <select id="reisender" style="width:100%;padding:10px;font-size:16px;margin:6px 0">
-      <option>Lauli fährt nach München</option>
-      <option>Dani fährt nach Düsseldorf</option>
-    </select>
-    <div class="meta">Ankunft</div>
-    <input id="ankunft" type="datetime-local">
-    <div class="meta">Abreise</div>
-    <input id="abreise" type="datetime-local">
-    <button onclick="besuchSpeichern()" style="margin-top:8px">Speichern</button>
-  </details>
-</div>
-    
+      <div id="countdown" style="font-size:22px;font-weight:600;text-align:center">Noch kein Treffen geplant</div>
+      <div id="besuchInfo" class="meta" style="text-align:center"></div>
+      <div id="letzteFahrt" class="meta" style="text-align:center"></div>
+      <details>
+        <summary class="meta">Nächstes Treffen eintragen</summary>
+        <select id="reisender" style="margin:6px 0">
+          <option>Lauli fährt nach München</option>
+          <option>Dani fährt nach Düsseldorf</option>
+        </select>
+        <div class="meta">Ankunft</div>
+        <input id="ankunft" type="datetime-local">
+        <div class="meta">Abreise</div>
+        <input id="abreise" type="date">
+        <button onclick="besuchSpeichern()" style="margin-top:8px">Speichern</button>
+      </details>
+    </div>
+
+    <!-- Erinnerungen -->
     <div class="post">
-  <div style="font-weight:600;margin-bottom:6px">📝 Erinnerungen</div>
-  <div id="notizenListe"></div>
-  <textarea id="notizText" rows="2" placeholder="Woran soll ich dich erinnern?"></textarea>
-  <button onclick="notizSenden()" style="margin-top:6px">Erinnerung schicken</button>
-</div>
-    <label><button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button></label>
+      <div style="font-weight:600;margin-bottom:6px">📝 Erinnerungen</div>
+      <div id="notizenListe"></div>
+      <textarea id="notizText" rows="2" placeholder="Woran soll ich dich erinnern?"></textarea>
+      <button onclick="notizSenden()" style="margin-top:6px">Erinnerung schicken</button>
+    </div>
+
+    <!-- Foto / Video & Benachrichtigungen -->
+    <button onclick="document.getElementById('datei').click()">📸 Foto oder Video aufnehmen</button>
     <input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
-<button id="pushKnopf" onclick="pushUmschalten()">🔔 Benachrichtigungen aktivieren</button>
+    <button id="pushKnopf" onclick="pushUmschalten()">🔔 Benachrichtigungen aktivieren</button>
     <div id="status" class="meta"></div>
+
+    <!-- Feed -->
     <div id="feed"></div>
   </div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+/* =========================================================
+   Einstellungen
+   ========================================================= */
 const SUPABASE_URL = "https://uqsakgfdlcnvqqkhdryt.supabase.co";
 const SUPABASE_KEY = "sb_publishable_pFCNvR9izezcO8GZOD6tTA_ET-YppfI";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-const EMOJIS = ["❤️", "😂", "😭", "😮"];
-let ich = null;
+const GIPHY_KEY = "kEmWwXsKqsGfZMIqsEQY7vP3YVqCcXLQ";
+const VAPID_PUBLIC = "BN9ZIOLWc1yuuTJW3ZZE1F3Mxl8ZuYyQhfcdg8rliLdmtgNNVLopFWgZzEaK9d7UBRmrnAWd3TK1DwoGHVF2WCo";
 
+const EMOJIS = ["❤️", "😂", "😭", "😮"];
+const MAX_VIDEO_SEKUNDEN = 15;
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let ich = null;
+let leute = [];
+
+window.addEventListener("error", e => alert("Fehler: " + e.message));
+window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
+
+/* =========================================================
+   Hilfsfunktionen
+   ========================================================= */
+function schuetzen(t) {
+  return String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function nameVon(id) {
+  return (leute.find(p => p.user_id === id) || {}).name || "?";
+}
+
+async function leuteLaden() {
+  if (!leute.length) leute = speicherLesen("leute", []);
+  if (window.leuteGeladen) return;
+  const { data } = await db.from("personen").select("user_id, name");
+  if (data && data.length) {
+    leute = data;
+    speicherSchreiben("leute", data);
+    window.leuteGeladen = true;
+  }
+}
+
+// Verkleinert ein Bild (z. B. Handyfoto) und gibt es als Blob zurück
+function bildVerkleinern(datei, maxSeite, typ = "image/jpeg", qualitaet = 0.85) {
+  return new Promise((ok, fehler) => {
+    const bild = new Image();
+    bild.onload = () => {
+      const f = Math.min(1, maxSeite / Math.max(bild.width, bild.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(bild.width * f);
+      c.height = Math.round(bild.height * f);
+      c.getContext("2d").drawImage(bild, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(bild.src);
+      c.toBlob(b => b ? ok(b) : fehler(new Error("Bild konnte nicht umgewandelt werden")), typ, qualitaet);
+    };
+    bild.onerror = () => fehler(new Error("Bild konnte nicht geladen werden"));
+    bild.src = URL.createObjectURL(datei);
+  });
+}
+
+function videoDauer(datei) {
+  return new Promise(ok => {
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); ok(v.duration || 0); };
+    v.onerror = () => ok(0);
+    v.src = URL.createObjectURL(datei);
+  });
+}
+
+/* =========================================================
+   Start & Login
+   ========================================================= */
 async function start() {
   const { data } = await db.auth.getSession();
   if (data.session) { ich = data.session.user; zeigeApp(); }
@@ -83,10 +160,11 @@ async function einloggen() {
     password: document.getElementById("passwort").value
   });
   if (error) return alert("Login fehlgeschlagen: " + error.message);
-  ich = data.user; zeigeApp();
+  ich = data.user;
+  zeigeApp();
 }
 
-function zeigeApp() {
+async function zeigeApp() {
   document.getElementById("login").classList.add("versteckt");
   document.getElementById("app").classList.remove("versteckt");
   ladeFeed();
@@ -95,76 +173,175 @@ function zeigeApp() {
   pushStatusZeigen();
 }
 
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && ich) ladeNotizen();
+});
+
+/* =========================================================
+   Fotos & Videos posten
+   ========================================================= */
 async function hochladen(datei) {
   if (!datei) return;
   const status = document.getElementById("status");
-  status.textContent = "Wird hochgeladen …";
-  const typ = datei.type.startsWith("video") ? "video" : "foto";
+  const feld = document.getElementById("datei");
+  const istVideo = datei.type.startsWith("video");
 
-  // Letzten Alarm von heute holen und prüfen, ob man zu spät ist (2 Minuten)
-  const { data: alarme } = await db.from("alarme").select("*").order("ausgeloest_um", { ascending: false }).limit(1);
-  let alarmId = null, zuSpaet = false;
-  if (alarme && alarme.length) {
-    const zeit = new Date(alarme[0].ausgeloest_um);
-    if (zeit.toDateString() === new Date().toDateString()) {
-      alarmId = alarme[0].id;
-      zuSpaet = (Date.now() - zeit.getTime()) > 2 * 60 * 1000;
+  try {
+    if (istVideo) {
+      const dauer = await videoDauer(datei);
+      if (dauer > MAX_VIDEO_SEKUNDEN + 1) {
+        feld.value = "";
+        return alert(`Videos dürfen höchstens ${MAX_VIDEO_SEKUNDEN} Sekunden lang sein (dieses hat ${Math.round(dauer)} Sekunden).`);
+      }
+      if (datei.size > 50 * 1024 * 1024) {
+        feld.value = "";
+        return alert("Das Video ist zu groß (max. 50 MB).");
+      }
+    }
+
+    status.textContent = "Wird hochgeladen …";
+
+    // Zu spät? (mehr als 2 Minuten nach dem heutigen Alarm)
+    const { data: alarme } = await db.from("alarme").select("*").order("ausgeloest_um", { ascending: false }).limit(1);
+    let alarmId = null, zuSpaet = false;
+    if (alarme && alarme.length) {
+      const zeit = new Date(alarme[0].ausgeloest_um);
+      if (zeit.toDateString() === new Date().toDateString()) {
+        alarmId = alarme[0].id;
+        zuSpaet = (Date.now() - zeit.getTime()) > 2 * 60 * 1000;
+      }
+    }
+
+    let inhalt = datei, endung = (datei.name.split(".").pop() || "mov").toLowerCase(), typInfo = {};
+    if (!istVideo) {
+      inhalt = await bildVerkleinern(datei, 1600);
+      endung = "jpg";
+      typInfo = { contentType: "image/jpeg" };
+    }
+    const pfad = `${ich.id}/${Date.now()}.${endung}`;
+    const { error: fehler } = await db.storage.from("medien").upload(pfad, inhalt, { ...typInfo, cacheControl: "31536000" });
+    if (fehler) throw fehler;
+
+    const { error } = await db.from("posts").insert({ datei_pfad: pfad, typ: istVideo ? "video" : "foto", alarm_id: alarmId, zu_spaet: zuSpaet });
+    if (error) throw error;
+
+    status.textContent = "Gepostet! ✅";
+    ladeFeed();
+  } catch (e) {
+    status.textContent = "";
+    alert("Upload fehlgeschlagen: " + e.message);
+  } finally {
+    feld.value = "";
+  }
+}
+
+/* =========================================================
+   Feed, Reaktionen & Kommentare
+   ========================================================= */
+// Bild-Links und letzten Feed auf dem Handy merken, damit nach dem Neuladen sofort etwas da ist
+function speicherLesen(name, standard) {
+  try { return JSON.parse(localStorage.getItem(name)) ?? standard; } catch (e) { return standard; }
+}
+function speicherSchreiben(name, wert) {
+  try { localStorage.setItem(name, JSON.stringify(wert)); } catch (e) {}
+}
+
+function feedLinks() {
+  if (!window.feedLinksSpeicher) {
+    const gespeichert = speicherLesen("feedLinks", {});
+    const jetzt = Date.now();
+    window.feedLinksSpeicher = {};
+    for (const [pfad, eintrag] of Object.entries(gespeichert)) {
+      if (eintrag && eintrag.bis > jetzt) window.feedLinksSpeicher[pfad] = eintrag;
     }
   }
-
-  const pfad = ich.id + "/" + Date.now() + "-" + datei.name;
-  const { error: fehler } = await db.storage.from("medien").upload(pfad, datei);
-  if (fehler) { status.textContent = ""; return alert("Upload fehlgeschlagen: " + fehler.message); }
-
-  await db.from("posts").insert({ datei_pfad: pfad, typ, alarm_id: alarmId, zu_spaet: zuSpaet });
-  status.textContent = "Gepostet! ✅";
-  document.getElementById("datei").value = "";
-  ladeFeed();
+  return window.feedLinksSpeicher;
 }
 
-async function ladeFeed() {
-  const { data: posts } = await db.from("posts")
-    .select("*, reaktionen(*), kommentare(*)")
-    .order("erstellt_um", { ascending: false }).limit(30);
+function feedZeichnen(posts) {
+  const links = feedLinks();
   const feed = document.createDocumentFragment();
-const linkSpeicher = window.feedLinks = window.feedLinks || {};
-const fehlend = (posts || []).map(p => p.datei_pfad).filter(x => !linkSpeicher[x]);
-if (fehlend.length) {
-  const { data: neu } = await db.storage.from("medien").createSignedUrls(fehlend, 86400);
-  (neu || []).forEach(l => { if (l.signedUrl) linkSpeicher[l.path] = l.signedUrl; });
-}
-
   for (const p of posts || []) {
-const link = { signedUrl: linkSpeicher[p.datei_pfad] };
-if (!leute.length) leute = (await db.from("personen").select("user_id, name")).data || [];
-const von = (leute.find(x => x.user_id === p.user_id) || {}).name || "?";
+    const url = links[p.datei_pfad]?.url || "";
     const zeit = new Date(p.erstellt_um).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
     const medium = p.typ === "video"
-      ? `<video src="${link.signedUrl}" controls playsinline></video>`
-      : `<img src="${link.signedUrl}">`;
+      ? `<video src="${url}" controls playsinline preload="metadata"></video>`
+      : `<img src="${url}" class="laedt" decoding="async" onload="this.classList.remove('laedt')">`;
 
-  const zaehler = [...new Set([...EMOJIS, ...p.reaktionen.map(r => r.emoji)])].map(e => {
-      const anzahl = p.reaktionen.filter(r => r.emoji === e).length;
+    const reaktionen = p.reaktionen || [];
+    const zaehler = [...new Set([...EMOJIS, ...reaktionen.map(r => r.emoji)])].map(e => {
+      const anzahl = reaktionen.filter(r => r.emoji === e).length;
       return `<button onclick="reagieren(${p.id}, '${e}')">${e} ${anzahl || ""}</button>`;
- }).join("") + `<button onclick="eigenesEmoji(${p.id})">➕</button>`;
+    }).join("") + `<button onclick="eigenesEmoji(${p.id})">➕</button>`;
 
-    const kommentare = p.kommentare
+    const kommentare = (p.kommentare || []).slice()
       .sort((a, b) => new Date(a.erstellt_um) - new Date(b.erstellt_um))
-           .map(k => `<div class="kommentar"><b>${(leute.find(x => x.user_id === k.user_id) || {}).name || "?"}</b> ${k.gif_url ? `<br><img src="${schuetzen(k.gif_url)}" style="width:60%;border-radius:10px;margin-top:4px">` : schuetzen(k.text)}</div>`).join("");
+      .map(k => `<div class="kommentar"><b>${schuetzen(nameVon(k.user_id))}</b> ${k.gif_url
+        ? `<br><img src="${schuetzen(k.gif_url)}" style="width:60%;border-radius:10px;margin-top:4px">`
+        : schuetzen(k.text)}</div>`)
+      .join("");
+
     const div = document.createElement("div");
     div.className = "post";
     div.innerHTML = `
       ${medium}
-      <div class="meta">${von} · ${zeit} ${p.zu_spaet ? '<span class="spaet">· zu spät ⏰</span>' : ""}</div>
+      <div class="meta">${schuetzen(nameVon(p.user_id))} · ${zeit} ${p.zu_spaet ? '<span class="spaet">· zu spät ⏰</span>' : ""}</div>
       <div class="emojis">${zaehler}</div>
       ${kommentare}
-      <input id="k${p.id}" placeholder="Kommentar schreiben …">
-      <div style="display:flex;gap:6px;margin-top:6px"><button onclick="kommentieren(${p.id})">Senden</button><button onclick="gifSuchen(${p.id})" style="width:auto;background:#f3f3f3;color:#333">GIF</button></div>`;
+      <input id="k${p.id}" placeholder="Kommentar schreiben …" enterkeyhint="send" onkeydown="if (event.key === 'Enter') kommentieren(${p.id})">
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button onclick="kommentieren(${p.id})">Senden</button>
+        <button onclick="gifSuchen(${p.id})" class="grau">GIF 😺</button>
+      </div>`;
     feed.appendChild(div);
   }
+
+  // Getippten Kommentar nicht verlieren, wenn der Feed neu gezeichnet wird
+  const offen = {};
+  document.querySelectorAll('#feed input[id^="k"]').forEach(f => { if (f.value) offen[f.id] = f.value; });
+  const fokus = document.activeElement?.id;
+
   const y = window.scrollY;
-document.getElementById("feed").replaceChildren(feed);
-window.scrollTo(0, y);
+  document.getElementById("feed").replaceChildren(feed);
+  window.scrollTo(0, y);
+
+  for (const [id, wert] of Object.entries(offen)) {
+    const f = document.getElementById(id);
+    if (f) f.value = wert;
+  }
+  if (fokus && fokus.startsWith("k")) document.getElementById(fokus)?.focus();
+}
+
+let feedGezeichnet = false;
+
+async function ladeFeed() {
+  // 1. Sofort den zuletzt bekannten Feed anzeigen
+  if (!feedGezeichnet) {
+    if (!leute.length) leute = speicherLesen("leute", []);
+    const alt = speicherLesen("feedCache", null);
+    if (alt) { feedZeichnen(alt); feedGezeichnet = true; }
+  }
+
+  // 2. Aktuelle Daten holen (Namen und Posts gleichzeitig)
+  const [, antwort] = await Promise.all([
+    leuteLaden(),
+    db.from("posts").select("*, reaktionen(*), kommentare(*)").order("erstellt_um", { ascending: false }).limit(30)
+  ]);
+  const posts = antwort.data || [];
+
+  // 3. Nur für neue Bilder Links holen, alte wiederverwenden (dann kommen sie aus dem Handy-Speicher)
+  const links = feedLinks();
+  const fehlend = posts.map(p => p.datei_pfad).filter(x => !links[x]);
+  if (fehlend.length) {
+    const { data: neu } = await db.storage.from("medien").createSignedUrls(fehlend, 7 * 86400);
+    const bis = Date.now() + 6 * 86400 * 1000;
+    (neu || []).forEach(l => { if (l.signedUrl) links[l.path] = { url: l.signedUrl, bis }; });
+    speicherSchreiben("feedLinks", links);
+  }
+
+  speicherSchreiben("feedCache", posts);
+  feedZeichnen(posts);
+  feedGezeichnet = true;
 }
 
 async function reagieren(postId, emoji) {
@@ -173,174 +350,30 @@ async function reagieren(postId, emoji) {
   ladeFeed();
 }
 
+async function eigenesEmoji(postId) {
+  const e = (prompt("Welches Emoji? Tipp einfach eins ein 😊") || "").trim();
+  if (!e) return;
+  if (e.length > 12 || /[<>"'`\\]/.test(e) || !/\p{Extended_Pictographic}/u.test(e)) {
+    return alert("Bitte nur ein Emoji eingeben.");
+  }
+  reagieren(postId, e);
+}
+
 async function kommentieren(postId) {
   const feld = document.getElementById("k" + postId);
-  if (!feld.value.trim()) return;
-  await db.from("kommentare").insert({ post_id: postId, text: feld.value.trim() });
+  const text = feld.value.trim();
+  if (!text) return;
+  const { error } = await db.from("kommentare").insert({ post_id: postId, text });
+  if (error) return alert("Fehler: " + error.message);
   ladeFeed();
 }
 
-function schuetzen(t) {
-  return t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-  const VAPID_PUBLIC = "BN9ZIOLWc1yuuTJW3ZZE1F3Mxl8ZuYyQhfcdg8rliLdmtgNNVLopFWgZzEaK9d7UBRmrnAWd3TK1DwoGHVF2WCo";
-
-function base64ZuBytes(s) {
-  const rest = "=".repeat((4 - s.length % 4) % 4);
-  const roh = atob((s + rest).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from([...roh].map(c => c.charCodeAt(0)));
-}
-
-async function pushAktivieren() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return alert("Bitte öffne die App über das Symbol auf dem Home-Bildschirm.");
-  }
-  const erlaubnis = await Notification.requestPermission();
-  if (erlaubnis !== "granted") return alert("Benachrichtigungen wurden nicht erlaubt.");
-  const reg = await navigator.serviceWorker.register("sw.js");
-  await navigator.serviceWorker.ready;
-  let abo = await reg.pushManager.getSubscription();
-  if (!abo) {
-    abo = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: base64ZuBytes(VAPID_PUBLIC)
-    });
-  }
-  const { error } = await db.from("push_abos").upsert(
-    { abo: abo.toJSON() },
-    { onConflict: "user_id,abo", ignoreDuplicates: true }
-  );
-  if (error) return alert("Fehler: " + error.message);
-  alert("Benachrichtigungen sind aktiv! 🔔");
-}
-
-let besuche = [];
-
-async function ladeBesuch() {
-  const { data } = await db.from("besuche").select("*")
-    .gte("ankunft", new Date(Date.now() - 60 * 864e5).toISOString())
-    .order("ankunft");
-  const jetzt = new Date();
-  besuche = (data || []).filter(b =>
-    new Date(b.ankunft) > jetzt || (b.abreise && new Date(b.abreise + "T23:59") >= jetzt));
-  zeigeCountdown();
-}
-
-function restZeit(datum) {
-  const diff = new Date(datum) - new Date();
-  if (diff <= 0) return "Ihr seid zusammen 💕";
-  const t = Math.floor(diff / 864e5), h = Math.floor(diff / 36e5) % 24, m = Math.floor(diff / 6e4) % 60;
-  return `Noch ${t} T · ${h} Std · ${m} Min 💕`;
-}
-
-function zeigeCountdown() {
-  const el = document.getElementById("countdown");
-  const info = document.getElementById("besuchInfo");
-  if (!besuche.length) { el.textContent = "Noch kein Treffen geplant"; info.innerHTML = ""; return; }
-  el.textContent = restZeit(besuche[0].ankunft);
-  info.innerHTML = besuche.map(b => {
-    const ankunft = new Date(b.ankunft).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
-    const bis = b.abreise ? " · bis " + new Date(b.abreise).toLocaleDateString("de-DE") : "";
-    return `<div style="display:flex;align-items:center;gap:8px;margin:8px 0;text-align:left">
-      <div style="flex:1">${schuetzen(b.reisender)}<br>Ankunft ${ankunft}${bis}<br><b>${restZeit(b.ankunft)}</b></div>
-      <button onclick="besuchLoeschen(${b.id})" style="width:auto;background:#f3f3f3;color:#333">🗑️</button>
-    </div>`;
-  }).join("");
-}
-
-async function besuchSpeichern() {
-  const ankunft = document.getElementById("ankunft").value;
-  if (!ankunft) return alert("Bitte die Ankunft eintragen.");
-  const { error } = await db.from("besuche").insert({
-    reisender: document.getElementById("reisender").value,
-    ankunft: new Date(ankunft).toISOString(),
-    abreise: document.getElementById("abreise").value || null
-  });
-  if (error) return alert("Fehler: " + error.message);
-  document.getElementById("ankunft").value = "";
-  document.getElementById("abreise").value = "";
-  ladeBesuch();
-}
-
-async function besuchLoeschen(id) {
-  if (!confirm("Diesen Termin wirklich löschen?")) return;
-  const { error } = await db.from("besuche").delete().eq("id", id);
-  if (error) return alert("Fehler: " + error.message);
-  ladeBesuch();
-}
-
-setInterval(zeigeCountdown, 60000);
-  let leute = [];
-
-async function ladeNotizen() {
-  if (!leute.length) {
-    const { data } = await db.from("personen").select("user_id, name");
-    leute = data || [];
-  }
-  const name = id => (leute.find(p => p.user_id === id) || {}).name || "?";
-  const { data } = await db.from("notizen").select("*").eq("erledigt", false).order("erstellt_um");
-  const offen = data || [];
-  document.getElementById("notizenListe").innerHTML = offen.map(n => `
-    <div style="display:flex;align-items:center;gap:8px;margin:6px 0">
-      <div style="flex:1" class="kommentar">${n.an === ich.id ? "💌 Von " + schuetzen(name(n.von)) : "📤 An " + schuetzen(name(n.an))}: ${schuetzen(n.text)}</div>
-      <button onclick="notizErledigt(${n.id})" style="width:auto;background:#f3f3f3;color:#333">${n.an === ich.id ? "✅" : "🗑️"}</button>
-    </div>`).join("") || '<div class="meta">Keine offenen Erinnerungen</div>';
-  const fuerMich = offen.filter(n => n.an === ich.id).length;
-  if (navigator.setAppBadge) fuerMich ? navigator.setAppBadge(fuerMich) : navigator.clearAppBadge();
-}
-
-async function notizSenden() {
-  const feld = document.getElementById("notizText");
-  const text = feld.value.trim();
-  if (!text) return;
-  const anderer = leute.find(p => p.user_id !== ich.id);
-  if (!anderer) return alert("Die andere Person wurde nicht gefunden.");
-  const { error } = await db.from("notizen").insert({ an: anderer.user_id, text });
-  if (error) return alert("Fehler: " + error.message);
-  feld.value = "";
-  ladeNotizen();
-}
-
-async function notizErledigt(id) {
-  await db.from("notizen").update({ erledigt: true }).eq("id", id);
-  ladeNotizen();
-}
-
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && ich) ladeNotizen();
-});
-  async function pushStatusZeigen() {
-  const knopf = document.getElementById("pushKnopf");
-  if (!knopf) return;
-  let aktiv = false;
-  if ("serviceWorker" in navigator && "PushManager" in window && Notification.permission === "granted") {
-    const reg = await navigator.serviceWorker.getRegistration();
-    aktiv = !!(reg && await reg.pushManager.getSubscription());
-  }
-  knopf.dataset.aktiv = aktiv ? "1" : "";
-  knopf.textContent = aktiv ? "🔔 Benachrichtigungen sind an" : "🔕 Benachrichtigungen aktivieren";
-  knopf.style.background = aktiv ? "#f3f3f3" : "";
-  knopf.style.color = aktiv ? "#333" : "";
-}
-
-async function pushUmschalten() {
-  const knopf = document.getElementById("pushKnopf");
-  if (knopf.dataset.aktiv) {
-    if (!confirm("Benachrichtigungen auf diesem Handy ausschalten?")) return;
-    const reg = await navigator.serviceWorker.getRegistration();
-    const abo = reg && await reg.pushManager.getSubscription();
-    if (abo) {
-      await db.from("push_abos").delete().eq("abo->>endpoint", abo.endpoint);
-      await abo.unsubscribe();
-    }
-  } else {
-    await pushAktivieren();
-  }
-  pushStatusZeigen();
-}
-  const GIPHY_KEY = "kEmWwXsKqsGfZMIqsEQY7vP3YVqCcXLQ";
+/* =========================================================
+   GIFs, Sticker & eigene Sticker
+   ========================================================= */
 let gifPost = null;
-  let gifArt = "gifs";
+let gifArt = "gifs";
+let stickerBearbeiten = false;
 
 function gifFenster() {
   let f = document.getElementById("gifFenster");
@@ -351,13 +384,13 @@ function gifFenster() {
   f.innerHTML = `
     <div style="background:#fff;width:100%;height:75vh;border-radius:16px 16px 0 0;padding:12px;box-sizing:border-box;display:flex;flex-direction:column">
       <div style="display:flex;gap:6px">
-        <input id="gifSuche" placeholder="GIF suchen …" style="flex:1">
-        <button onclick="gifSchliessen()" style="width:auto;background:#f3f3f3;color:#333">✕</button>
+        <input id="gifSuche" placeholder="Suchen …" style="flex:1">
+        <button onclick="gifSchliessen()" class="grau">✕</button>
       </div>
-          <div style="display:flex;gap:6px;margin-top:8px">
+      <div style="display:flex;gap:6px;margin-top:8px">
         <button id="artGifs" onclick="gifArtWechseln('gifs')" style="flex:1">GIFs</button>
         <button id="artStickers" onclick="gifArtWechseln('stickers')" style="flex:1;background:#f3f3f3;color:#333">Sticker</button>
-                <button id="artEigene" onclick="gifArtWechseln('eigene')" style="flex:1;background:#f3f3f3;color:#333">⭐ Eigene</button>
+        <button id="artEigene" onclick="gifArtWechseln('eigene')" style="flex:1;background:#f3f3f3;color:#333">⭐ Eigene</button>
       </div>
       <div id="gifErgebnisse" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;overflow-y:auto;margin-top:8px;flex:1;align-content:start"></div>
       <div class="meta" style="text-align:center">Powered by GIPHY</div>
@@ -369,33 +402,53 @@ function gifFenster() {
   return f;
 }
 
+function gifSuchen(postId) {
+  gifPost = postId;
+  gifFenster().style.display = "flex";
+  document.getElementById("gifSuche").value = "";
+  gifLaden("");
+}
+
+function gifSchliessen() {
+  document.getElementById("gifFenster").style.display = "none";
+}
+
+function gifArtWechseln(art) {
+  gifArt = art;
+  [["artGifs", "gifs"], ["artStickers", "stickers"], ["artEigene", "eigene"]].forEach(([id, a]) => {
+    const k = document.getElementById(id);
+    if (k) k.style.cssText = a === art ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
+  });
+  gifLaden(document.getElementById("gifSuche").value);
+}
+
 async function gifLaden(suche) {
-    if (gifArt === "eigene") return eigeneStickerLaden();
+  if (gifArt === "eigene") return eigeneStickerLaden();
   const box = document.getElementById("gifErgebnisse");
   const url = suche.trim()
     ? `https://api.giphy.com/v1/${gifArt}/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(suche)}&limit=24&rating=pg-13&lang=de`
     : `https://api.giphy.com/v1/${gifArt}/trending?api_key=${GIPHY_KEY}&limit=24&rating=pg-13`;
   try {
-    const antwort = await fetch(url);
-    const { data } = await antwort.json();
+    const { data } = await (await fetch(url)).json();
     box.innerHTML = (data || []).map(g => {
       const klein = g.images.fixed_width.url;
       return `<img src="${klein}" onclick="gifSenden('${klein}')" style="width:100%;border-radius:8px">`;
-    }).join("") || '<div class="meta">Keine GIFs gefunden</div>';
+    }).join("") || '<div class="meta">Nichts gefunden</div>';
   } catch (e) {
     box.innerHTML = '<div class="meta">GIFs konnten nicht geladen werden</div>';
   }
 }
 
-function gifSuchen(postId) {
-  gifPost = postId;
-  const f = gifFenster();
-  f.style.display = "flex";
-  document.getElementById("gifSuche").value = "";
-  gifLaden("");
+async function kommentarMitBild(url) {
+  gifSchliessen();
+  const { error } = await db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: url });
+  if (error) return alert("Fehler: " + error.message);
+  ladeFeed();
 }
 
-let stickerBearbeiten = false;
+function gifSenden(url) {
+  if (url.startsWith("https://media")) kommentarMitBild(url);
+}
 
 async function eigeneStickerLaden() {
   const box = document.getElementById("gifErgebnisse");
@@ -409,29 +462,58 @@ async function eigeneStickerLaden() {
   box.innerHTML = `
     <div style="grid-column:1/-1;display:flex;gap:6px">
       <button onclick="document.getElementById('stickerDatei').click()">+ Eigenen Sticker hinzufügen</button>
-      <button onclick="stickerBearbeitenUmschalten()" style="width:auto;background:#f3f3f3;color:#333">${stickerBearbeiten ? "Fertig" : "✏️"}</button>
+      <button onclick="stickerBearbeitenUmschalten()" class="grau">${stickerBearbeiten ? "Fertig" : "✏️"}</button>
     </div>
-   <div class="meta" style="grid-column:1/-1">Sticker aus deiner Tastatur: Tipp ins Feld und wähl einen aus 👇</div>
+    <div class="meta" style="grid-column:1/-1">Sticker aus deiner Tastatur: Tipp ins Feld und wähl einen aus 👇</div>
     <div id="tastaturFeld" contenteditable="true" style="grid-column:1/-1;min-height:44px;border:2px dashed #1f3a68;border-radius:10px;padding:10px;background:#fff"></div>
     <input id="stickerDatei" type="file" accept="image/*" class="versteckt" onchange="stickerHochladen(this.files[0])">
     ${kacheln || '<div class="meta" style="grid-column:1/-1">Noch keine eigenen Sticker</div>'}`;
-    tastaturFeldEinrichten();
+  tastaturFeldEinrichten();
+}
+
+function stickerBearbeitenUmschalten() {
+  stickerBearbeiten = !stickerBearbeiten;
+  eigeneStickerLaden();
+}
+
+// Lädt ein Bild als Sticker hoch und gibt die öffentliche Adresse zurück
+async function stickerSpeichern(datei) {
+  const blob = await bildVerkleinern(datei, 400, "image/png");
+  const pfad = `${ich.id}/${Date.now()}.png`;
+  const { error } = await db.storage.from("sticker").upload(pfad, blob, { contentType: "image/png" });
+  if (error) throw error;
+  const url = db.storage.from("sticker").getPublicUrl(pfad).data.publicUrl;
+  const { error: fehler } = await db.from("sticker").insert({ url, pfad });
+  if (fehler) throw fehler;
+  return url;
+}
+
+async function stickerHochladen(datei) {
+  if (!datei) return;
+  try {
+    await stickerSpeichern(datei);
+    eigeneStickerLaden();
+  } catch (e) {
+    alert("Sticker konnte nicht hochgeladen werden: " + e.message);
+  }
+}
+
+function stickerSenden(id) {
+  const s = (window.eigeneSticker || []).find(x => x.id === id);
+  if (s) kommentarMitBild(s.url);
+}
+
+async function stickerLoeschen(id) {
+  if (!confirm("Diesen Sticker aus eurer Sammlung löschen?")) return;
+  await db.from("sticker").delete().eq("id", id);
+  eigeneStickerLaden();
 }
 
 async function tastaturSticker(datei) {
   const feld = document.getElementById("tastaturFeld");
   if (feld) feld.innerHTML = "";
   try {
-    const blob = await stickerVerkleinern(datei);
-    const pfad = ich.id + "/" + Date.now() + ".png";
-    const { error } = await db.storage.from("sticker").upload(pfad, blob, { contentType: "image/png" });
-    if (error) throw error;
-    const url = db.storage.from("sticker").getPublicUrl(pfad).data.publicUrl;
-    await db.from("sticker").insert({ url, pfad });
-    gifSchliessen();
-    const { error: fehler } = await db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: url });
-    if (fehler) throw fehler;
-    ladeFeed();
+    kommentarMitBild(await stickerSpeichern(datei));
   } catch (e) {
     alert("Sticker konnte nicht gesendet werden: " + e.message);
   }
@@ -462,98 +544,184 @@ function tastaturFeldEinrichten() {
     }
   });
 }
-  function stickerBearbeitenUmschalten() {
-  stickerBearbeiten = !stickerBearbeiten;
-  eigeneStickerLaden();
+
+/* =========================================================
+   Countdown & Treffen
+   ========================================================= */
+let besuche = [];
+
+async function ladeBesuch() {
+  const { data } = await db.from("besuche").select("*")
+    .gte("ankunft", new Date(Date.now() - 60 * 864e5).toISOString())
+    .order("ankunft");
+  const jetzt = new Date();
+  besuche = (data || []).filter(b =>
+    new Date(b.ankunft) > jetzt || (b.abreise && new Date(b.abreise + "T23:59") >= jetzt));
+  zeigeCountdown();
+  zeigeLetzteFahrt();
 }
 
-function stickerVerkleinern(datei) {
-  return new Promise((ok, fehler) => {
-    const bild = new Image();
-    bild.onload = () => {
-      const f = Math.min(1, 400 / Math.max(bild.width, bild.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(bild.width * f);
-      c.height = Math.round(bild.height * f);
-      c.getContext("2d").drawImage(bild, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(bild.src);
-      c.toBlob(b => b ? ok(b) : fehler(new Error("Bild konnte nicht umgewandelt werden")), "image/png");
-    };
-    bild.onerror = () => fehler(new Error("Bild konnte nicht geladen werden"));
-    bild.src = URL.createObjectURL(datei);
+function restZeit(datum) {
+  const diff = new Date(datum) - new Date();
+  if (diff <= 0) return "Ihr seid zusammen 💕";
+  const t = Math.floor(diff / 864e5), h = Math.floor(diff / 36e5) % 24, m = Math.floor(diff / 6e4) % 60;
+  return `Noch ${t} T · ${h} Std · ${m} Min 💕`;
+}
+
+function zeigeCountdown() {
+  const el = document.getElementById("countdown");
+  const info = document.getElementById("besuchInfo");
+  if (!besuche.length) { el.textContent = "Noch kein Treffen geplant"; info.innerHTML = ""; return; }
+  el.textContent = restZeit(besuche[0].ankunft);
+  info.innerHTML = besuche.map(b => {
+    const ankunft = new Date(b.ankunft).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+    const bis = b.abreise ? " · bis " + new Date(b.abreise).toLocaleDateString("de-DE") : "";
+    return `<div style="display:flex;align-items:center;gap:8px;margin:8px 0;text-align:left">
+      <div style="flex:1">${schuetzen(b.reisender)}<br>Ankunft ${ankunft}${bis}<br><b>${restZeit(b.ankunft)}</b></div>
+      <button onclick="besuchLoeschen(${b.id})" class="grau">🗑️</button>
+    </div>`;
+  }).join("");
+}
+
+async function zeigeLetzteFahrt() {
+  const { data } = await db.from("besuche").select("reisender, ankunft")
+    .lte("ankunft", new Date().toISOString())
+    .order("ankunft", { ascending: false }).limit(1);
+  const el = document.getElementById("letzteFahrt");
+  if (!data || !data.length) { el.innerHTML = ""; return; }
+  const zuletzt = data[0].reisender.split(" ")[0];
+  const auswahl = document.getElementById("reisender");
+  const naechste = [...auswahl.options].find(o => !o.value.startsWith(zuletzt));
+  if (naechste) auswahl.value = naechste.value;
+  const wer = naechste ? naechste.value.split(" ")[0] : "?";
+  const datum = new Date(data[0].ankunft).toLocaleDateString("de-DE");
+  el.innerHTML = `🚆 Zuletzt gefahren: <b>${schuetzen(zuletzt)}</b> (${datum})<br>Als Nächstes dran: <b>${schuetzen(wer)}</b>`;
+}
+
+async function besuchSpeichern() {
+  const ankunft = document.getElementById("ankunft").value;
+  if (!ankunft) return alert("Bitte die Ankunft eintragen.");
+  const { error } = await db.from("besuche").insert({
+    reisender: document.getElementById("reisender").value,
+    ankunft: new Date(ankunft).toISOString(),
+    abreise: document.getElementById("abreise").value || null
   });
-}
-
-async function stickerHochladen(datei) {
-  if (!datei) return;
-  try {
-    const blob = await stickerVerkleinern(datei);
-    const pfad = ich.id + "/" + Date.now() + ".png";
-    const { error } = await db.storage.from("sticker").upload(pfad, blob, { contentType: "image/png" });
-    if (error) throw error;
-    const { data } = db.storage.from("sticker").getPublicUrl(pfad);
-    const { error: fehler } = await db.from("sticker").insert({ url: data.publicUrl, pfad });
-    if (fehler) throw fehler;
-    eigeneStickerLaden();
-  } catch (e) {
-    alert("Sticker konnte nicht hochgeladen werden: " + e.message);
-  }
-}
-
-async function stickerSenden(id) {
-  const s = (window.eigeneSticker || []).find(x => x.id === id);
-  if (!s) return;
-  gifSchliessen();
-  const { error } = await db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: s.url });
   if (error) return alert("Fehler: " + error.message);
-  ladeFeed();
+  document.getElementById("ankunft").value = "";
+  document.getElementById("abreise").value = "";
+  ladeBesuch();
 }
 
-async function stickerLoeschen(id) {
-  if (!confirm("Diesen Sticker aus eurer Sammlung löschen?")) return;
-  await db.from("sticker").delete().eq("id", id);
-  eigeneStickerLaden();
-}
-
-function gifArtWechseln(art) {
-  gifArt = art;
-  [["artGifs", "gifs"], ["artStickers", "stickers"], ["artEigene", "eigene"]].forEach(([id, a]) => {
-    const k = document.getElementById(id);
-    if (k) k.style.cssText = a === art ? "flex:1" : "flex:1;background:#f3f3f3;color:#333";
-  });
-  gifLaden(document.getElementById("gifSuche").value);
-}
-  function gifSchliessen() {
-  document.getElementById("gifFenster").style.display = "none";
-}
-
-async function gifSenden(url) {
-  if (!url.startsWith("https://media")) return;
-  gifSchliessen();
-  const { error } = await db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: url });
+async function besuchLoeschen(id) {
+  if (!confirm("Diesen Termin wirklich löschen?")) return;
+  const { error } = await db.from("besuche").delete().eq("id", id);
   if (error) return alert("Fehler: " + error.message);
-  ladeFeed();
+  ladeBesuch();
 }
 
-async function eigenesEmoji(postId) {
-  const e = (prompt("Welches Emoji? Tipp einfach eins ein 😊") || "").trim();
-  if (!e) return;
-  if (e.length > 12 || /[<>"'`\\]/.test(e) || !/\p{Extended_Pictographic}/u.test(e)) {
-    return alert("Bitte nur ein Emoji eingeben.");
-  }
-  reagieren(postId, e);
+setInterval(zeigeCountdown, 60000);
+
+/* =========================================================
+   Erinnerungen (Notizen)
+   ========================================================= */
+async function ladeNotizen() {
+  await leuteLaden();
+  const { data } = await db.from("notizen").select("*").eq("erledigt", false).order("erstellt_um");
+  const offen = data || [];
+  document.getElementById("notizenListe").innerHTML = offen.map(n => `
+    <div style="display:flex;align-items:center;gap:8px;margin:6px 0">
+      <div style="flex:1" class="kommentar">${n.an === ich.id ? "💌 Von " + schuetzen(nameVon(n.von)) : "📤 An " + schuetzen(nameVon(n.an))}: ${schuetzen(n.text)}</div>
+      <button onclick="notizErledigt(${n.id})" class="grau">${n.an === ich.id ? "✅" : "🗑️"}</button>
+    </div>`).join("") || '<div class="meta">Keine offenen Erinnerungen</div>';
+  const fuerMich = offen.filter(n => n.an === ich.id).length;
+  if (navigator.setAppBadge) fuerMich ? navigator.setAppBadge(fuerMich) : navigator.clearAppBadge();
 }
-  window.addEventListener("error", e => alert("Fehler: " + e.message));
-window.addEventListener("unhandledrejection", e => alert("Fehler: " + (e.reason && e.reason.message || e.reason)));
-  start();
+
+async function notizSenden() {
+  const feld = document.getElementById("notizText");
+  const text = feld.value.trim();
+  if (!text) return;
+  const anderer = leute.find(p => p.user_id !== ich.id);
+  if (!anderer) return alert("Die andere Person wurde nicht gefunden.");
+  const { error } = await db.from("notizen").insert({ an: anderer.user_id, text });
+  if (error) return alert("Fehler: " + error.message);
+  feld.value = "";
+  ladeNotizen();
+}
+
+async function notizErledigt(id) {
+  await db.from("notizen").update({ erledigt: true }).eq("id", id);
+  ladeNotizen();
+}
+
+/* =========================================================
+   Push-Benachrichtigungen
+   ========================================================= */
+function base64ZuBytes(s) {
+  const rest = "=".repeat((4 - s.length % 4) % 4);
+  const roh = atob((s + rest).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from([...roh].map(c => c.charCodeAt(0)));
+}
+
+async function pushAktivieren() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return alert("Bitte öffne die App über das Symbol auf dem Home-Bildschirm.");
+  }
+  const erlaubnis = await Notification.requestPermission();
+  if (erlaubnis !== "granted") return alert("Benachrichtigungen wurden nicht erlaubt.");
+  const reg = await navigator.serviceWorker.register("sw.js");
+  await navigator.serviceWorker.ready;
+  let abo = await reg.pushManager.getSubscription();
+  if (!abo) {
+    abo = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64ZuBytes(VAPID_PUBLIC) });
+  }
+  const { error } = await db.from("push_abos").upsert({ abo: abo.toJSON() }, { onConflict: "user_id,abo", ignoreDuplicates: true });
+  if (error) return alert("Fehler: " + error.message);
+  alert("Benachrichtigungen sind aktiv! 🔔");
+}
+
+async function pushStatusZeigen() {
+  const knopf = document.getElementById("pushKnopf");
+  if (!knopf) return;
+  let aktiv = false;
+  if ("serviceWorker" in navigator && "PushManager" in window && Notification.permission === "granted") {
+    const reg = await navigator.serviceWorker.getRegistration();
+    aktiv = !!(reg && await reg.pushManager.getSubscription());
+  }
+  knopf.dataset.aktiv = aktiv ? "1" : "";
+  knopf.textContent = aktiv ? "🔔 Benachrichtigungen sind an" : "🔕 Benachrichtigungen aktivieren";
+  knopf.style.background = aktiv ? "#f3f3f3" : "";
+  knopf.style.color = aktiv ? "#333" : "";
+}
+
+async function pushUmschalten() {
+  const knopf = document.getElementById("pushKnopf");
+  if (knopf.dataset.aktiv) {
+    if (!confirm("Benachrichtigungen auf diesem Handy ausschalten?")) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const abo = reg && await reg.pushManager.getSubscription();
+    if (abo) {
+      await db.from("push_abos").delete().eq("abo->>endpoint", abo.endpoint);
+      await abo.unsubscribe();
+    }
+  } else {
+    await pushAktivieren();
+  }
+  pushStatusZeigen();
+}
+
+/* =========================================================
+   Los geht's
+   ========================================================= */
+start();
 </script>
 <script src="extras.js"></script>
-  <script src="abc.js"></script>
-  <script src="wuensche.js"></script>
-  <script src="kochbuch.js"></script>
-  <script src="watchlist.js"></script>
-  <script src="orte.js"></script>
-  <script src="navigation.js"></script>
-  <script src="bedienung.js"></script>
+<script src="abc.js"></script>
+<script src="wuensche.js"></script>
+<script src="kochbuch.js"></script>
+<script src="watchlist.js"></script>
+<script src="orte.js"></script>
+<script src="bedienung.js"></script>
+<script src="navigation.js"></script>
 </body>
 </html>
