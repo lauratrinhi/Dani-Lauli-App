@@ -8,6 +8,7 @@
     #vollbild img { max-width:100%; max-height:100%; object-fit:contain; border-radius:0; }
     .herz-pop { position:absolute; left:50%; top:50%; font-size:90px; transform:translate(-50%,-50%) scale(.3); opacity:0; pointer-events:none; animation:herzPop .8s ease forwards; }
     @keyframes herzPop { 30% { transform:translate(-50%,-50%) scale(1.15); opacity:1; } 70% { transform:translate(-50%,-50%) scale(1); opacity:1; } 100% { transform:translate(-50%,-60%) scale(1); opacity:0; } }
+    #reiterLeiste::-webkit-scrollbar { display:none; }
     #ziehenHinweis { position:fixed; top:0; left:0; right:0; text-align:center; padding:10px; font-size:14px; color:#888; z-index:60; transform:translateY(-100%); transition:transform .15s; }
     @media (prefers-color-scheme: dark) {
       :root { color-scheme: dark; }
@@ -73,35 +74,67 @@
   const hinweis = document.createElement("div");
   hinweis.id = "ziehenHinweis";
   document.body.appendChild(hinweis);
-  let startY = null, gezogen = 0;
+  let start = null, gezogen = 0;
+
+  const hinweisWeg = () => {
+    hinweis.style.transform = "translateY(-100%)";
+    start = null;
+    gezogen = 0;
+  };
 
   document.addEventListener("touchstart", e => {
-    if (window.scrollY <= 0 && !document.querySelector("#gifFenster[style*='flex'], #vollbild[style*='flex']")) {
-      startY = e.touches[0].clientY;
-    } else {
-      startY = null;
-    }
+    const inLeiste = e.target.closest("#reiterLeiste");
+    const offen = document.querySelector("#gifFenster[style*='flex'], #vollbild[style*='flex']");
+    start = (window.scrollY <= 0 && !inLeiste && !offen)
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      : null;
+    gezogen = 0;
   }, { passive: true });
 
   document.addEventListener("touchmove", e => {
-    if (startY === null) return;
-    gezogen = e.touches[0].clientY - startY;
-    if (gezogen > 20) {
-      hinweis.textContent = gezogen > 90 ? "↻ Loslassen zum Aktualisieren" : "↓ Zum Aktualisieren ziehen";
+    if (!start) return;
+    const dx = Math.abs(e.touches[0].clientX - start.x);
+    const dy = e.touches[0].clientY - start.y;
+    if (dx > 30 && dx > dy) { hinweisWeg(); return; } // seitliche Bewegung: kein Neuladen
+    gezogen = dy;
+    if (gezogen > 30 && window.scrollY <= 0) {
+      hinweis.textContent = gezogen > 120 ? "↻ Loslassen zum Aktualisieren" : "↓ Zum Aktualisieren ziehen";
       hinweis.style.transform = "translateY(0)";
     }
   }, { passive: true });
 
   document.addEventListener("touchend", () => {
-    if (startY !== null && gezogen > 90) {
+    if (start && gezogen > 120 && window.scrollY <= 0) {
       hinweis.textContent = "Lädt …";
       location.reload();
       return;
     }
-    hinweis.style.transform = "translateY(-100%)";
-    startY = null;
-    gezogen = 0;
+    hinweisWeg();
   });
+
+  // ---------- Reiter-Leiste: flüssig wischen, kein Versehens-Tipp ----------
+  let zuletztGewischt = 0;
+  const leisteEinrichten = setInterval(() => {
+    const heute = document.querySelector('[data-tab="heute"]');
+    if (!heute) return;
+    clearInterval(leisteEinrichten);
+    const leiste = heute.parentElement;
+    leiste.id = "reiterLeiste";
+    leiste.style.overflowX = "auto";
+    leiste.style.overscrollBehaviorX = "contain";
+    leiste.style.scrollbarWidth = "none";
+    leiste.style.webkitOverflowScrolling = "touch";
+    leiste.style.touchAction = "pan-x";
+    leiste.addEventListener("scroll", () => { zuletztGewischt = Date.now(); }, { passive: true });
+  }, 300);
+
+  // Ein Tipp direkt nach dem Wischen wird ignoriert (sonst springt die App ungewollt um)
+  document.addEventListener("click", ev => {
+    if (ev.target.closest("#reiterLeiste [data-tab]") && Date.now() - zuletztGewischt < 350) {
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+  }, true);
 
   // ---------- Rote Punkte bei Neuem ----------
   const QUELLEN = {
