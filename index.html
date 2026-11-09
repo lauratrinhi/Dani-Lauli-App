@@ -53,8 +53,6 @@
   header { display: flex; align-items: center; justify-content: space-between; max-width: 520px; margin: auto;
     padding: max(14px, env(safe-area-inset-top)) 20px 6px; }
   #titel { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
-  #glocke { background: var(--karte); border: 0.5px solid var(--rand); color: var(--blau-text); }
-  #glocke.aus { color: var(--text3); }
   main { padding: 6px 16px 16px; max-width: 520px; margin: auto; }
 
   /* Karten & Listen */
@@ -76,6 +74,28 @@
   .leer i { display: block; font-size: 34px; color: var(--text3); margin-bottom: 8px; }
   .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--blau-hell); color: var(--blau-text); font-weight: 700; font-size: 14px;
     display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+  .avatar.gross { width: 84px; height: 84px; font-size: 32px; }
+  #profilKnopf { width: 40px; height: 40px; padding: 0; border: 0.5px solid var(--rand); border-radius: 50%; background: var(--karte); overflow: hidden; }
+  #profilKnopf .avatar { width: 100%; height: 100%; }
+  .schalter { position: relative; width: 51px; height: 31px; flex: 0 0 auto; border-radius: 16px; border: none; padding: 0; margin: 0; background: var(--rand); transition: background .2s; }
+  .schalter::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: transform .2s; }
+  .schalter.an { background: var(--gruen); }
+  .schalter.an::after { transform: translateX(20px); }
+  .einstellung { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 0.5px solid var(--rand); }
+  .einstellung:last-child { border-bottom: none; }
+  .einstellung .inhalt { flex: 1; }
+  .einstellung .haupt { font-size: 15px; }
+  .einstellung .neben { font-size: 13px; color: var(--text2); margin-top: 2px; }
+  .galerie { position: relative; }
+  .galerie-spur { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .galerie-spur::-webkit-scrollbar { display: none; }
+  .galerie-spur img { flex: 0 0 100%; width: 100%; aspect-ratio: 4/5; object-fit: cover; scroll-snap-align: center; display: block; }
+  .galerie-punkte { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+  .galerie-punkte span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); }
+  .galerie-punkte span.an { background: #fff; }
+  .galerie-zahl { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 10px; }
+  .auswahl-liste .zeile { cursor: pointer; }
   .sterne { color: var(--gold); letter-spacing: 1px; white-space: nowrap; }
   .abzeichen { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 8px; background: var(--feld); color: var(--text2); }
   .raster { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
@@ -179,7 +199,7 @@
 <body class="ausgeloggt">
 <header>
   <span id="titel">Servus</span>
-  <button id="glocke" class="icon-knopf aus versteckt" onclick="pushUmschalten()" aria-label="Benachrichtigungen"><i class="ti ti-bell-off"></i></button>
+  <button id="profilKnopf" class="versteckt" onclick="einstellungen()" aria-label="Einstellungen"></button>
 </header>
 
 <main>
@@ -211,8 +231,7 @@
   </div>
 </main>
 
-<button id="plusKnopf" onclick="document.getElementById('datei').click()" aria-label="Foto oder Video aufnehmen"><i class="ti ti-camera"></i></button>
-<input id="datei" type="file" accept="image/*,video/*" capture="environment" class="versteckt" onchange="hochladen(this.files[0])">
+<button id="plusKnopf" onclick="postenAuswahl()" aria-label="Foto oder Video posten"><i class="ti ti-camera"></i></button>
 <nav id="untenLeiste" class="versteckt"></nav>
 <div id="vollbild" onclick="this.style.display='none'"><img alt=""></div>
 <div id="ziehen"></div>
@@ -252,7 +271,12 @@ const speicher = {
 
 function nameVon(id) { return (leute.find(p => p.user_id === id) || {}).name || "?"; }
 function andererId() { return (leute.find(p => p.user_id !== ich.id) || {}).user_id; }
-function avatar(id) { return `<span class="avatar">${schuetzen(nameVon(id).charAt(0).toUpperCase())}</span>`; }
+function avatar(id, klasse = "") {
+  const p = leute.find(x => x.user_id === id);
+  const url = p?.bild_pfad ? bildUrl(p.bild_pfad) : "";
+  return url ? `<span class="avatar ${klasse}"><img src="${url}" alt=""></span>`
+    : `<span class="avatar ${klasse}">${schuetzen(nameVon(id).charAt(0).toUpperCase())}</span>`;
+}
 function sterneText(n) { return "★".repeat(n) + "☆".repeat(5 - n); }
 function leer(text, icon = "mood-empty") { return `<div class="leer"><i class="ti ti-${icon}"></i>${text}</div>`; }
 function datumKurz(d) { return new Date(d).toLocaleDateString("de-DE", { day: "numeric", month: "short" }); }
@@ -270,9 +294,16 @@ function wieLange(datum) {
 async function leuteLaden() {
   if (!leute.length) leute = speicher.lesen("leute", []);
   if (window.leuteFrisch) return;
-  const { data } = await db.from("personen").select("user_id, name");
-  if (data && data.length) { leute = data; speicher.schreiben("leute", data); window.leuteFrisch = true; }
+  const { data } = await db.from("personen").select("user_id, name, bild_pfad, stumm");
+  if (data && data.length) {
+    leute = data;
+    speicher.schreiben("leute", data);
+    window.leuteFrisch = true;
+    await bildUrlsHolen(data.map(p => p.bild_pfad));
+    profilKnopfZeigen();
+  }
 }
+function profilKnopfZeigen() { if (ich) $("profilKnopf").innerHTML = avatar(ich.id); }
 
 /* ---------- Hinweise ---------- */
 function toast(text, art = "info") {
@@ -473,11 +504,12 @@ async function einloggen() {
 function zeigeApp() {
   $("login").classList.add("versteckt");
   $("app").classList.remove("versteckt");
-  $("glocke").classList.remove("versteckt");
+  $("profilKnopf").classList.remove("versteckt");
   $("untenLeiste").classList.remove("versteckt");
   document.body.classList.remove("ausgeloggt");
   if (!leute.length) leute = speicher.lesen("leute", []);
   navigationBauen();
+  profilKnopfZeigen();
   leuteLaden().then(() => { if (aktuelleSeite === "heute") homeLaden(); });
   pushStatusZeigen();
   setTimeout(punkteAktualisieren, 1500);
@@ -743,17 +775,42 @@ function videoDauer(datei) {
   });
 }
 
-async function hochladen(datei) {
-  const feld = $("datei");
-  if (!datei) return;
-  const istVideo = datei.type.startsWith("video");
+function postenAuswahl() {
+  const b = blatt(`
+    <h3>Was möchtest du posten?</h3>
+    <div class="meta">Aus der Galerie kannst du bis zu 10 Fotos auf einmal posten.</div>
+    <div class="auswahl-liste">
+      <div class="zeile" data-a="kamera"><i class="ti ti-camera" style="font-size:24px;color:var(--blau-text)"></i><div class="inhalt"><div class="haupt">Kamera</div><div class="neben">Foto oder kurzes Video aufnehmen</div></div><i class="ti ti-chevron-right" style="color:var(--text3)"></i></div>
+      <div class="zeile" data-a="galerie"><i class="ti ti-photo" style="font-size:24px;color:var(--blau-text)"></i><div class="inhalt"><div class="haupt">Aus der Galerie</div><div class="neben">Ein Video oder mehrere Fotos</div></div><i class="ti ti-chevron-right" style="color:var(--text3)"></i></div>
+    </div>`);
+  b.el.addEventListener("click", e => {
+    const k = e.target.closest("[data-a]");
+    if (!k) return;
+    const f = document.createElement("input");
+    f.type = "file";
+    f.className = "versteckt";
+    if (k.dataset.a === "kamera") { f.accept = "image/*,video/*"; f.setAttribute("capture", "environment"); }
+    else { f.accept = "image/*,video/*"; f.multiple = true; }
+    document.body.appendChild(f);
+    f.onchange = () => { const dateien = [...f.files]; f.remove(); hochladen(dateien); };
+    f.click();
+    b.zu();
+  });
+}
+
+async function hochladen(dateien) {
+  dateien = (dateien || []).filter(Boolean);
+  if (!dateien.length) return;
+  const video = dateien.find(d => d.type.startsWith("video"));
+  if (video && dateien.length > 1) return toast("Videos bitte einzeln posten.", "fehler");
+  if (dateien.length > 10) return toast("Höchstens 10 Fotos auf einmal.", "fehler");
   try {
-    if (istVideo) {
-      const dauer = await videoDauer(datei);
+    if (video) {
+      const dauer = await videoDauer(video);
       if (dauer > MAX_VIDEO_SEKUNDEN + 1) return toast(`Videos dürfen höchstens ${MAX_VIDEO_SEKUNDEN} Sekunden lang sein.`, "fehler");
-      if (datei.size > 50 * 1024 * 1024) return toast("Das Video ist zu groß (max. 50 MB).", "fehler");
+      if (video.size > 50 * 1024 * 1024) return toast("Das Video ist zu groß (max. 50 MB).", "fehler");
     }
-    toast("Wird hochgeladen …");
+    toast(dateien.length > 1 ? `${dateien.length} Fotos werden hochgeladen …` : "Wird hochgeladen …");
     const { data: alarme } = await db.from("alarme").select("*").order("ausgeloest_um", { ascending: false }).limit(1);
     let alarmId = null, zuSpaet = false;
     if (alarme && alarme.length) {
@@ -763,42 +820,70 @@ async function hochladen(datei) {
         zuSpaet = Date.now() - zeit.getTime() > 2 * 60 * 1000;
       }
     }
-    let pfad;
-    if (istVideo) {
-      const endung = (datei.name.split(".").pop() || "mov").toLowerCase();
-      pfad = `${ich.id}/${Date.now()}.${endung}`;
-      const { error } = await db.storage.from("medien").upload(pfad, datei, { cacheControl: "31536000" });
+    const pfade = [];
+    if (video) {
+      const pfad = `${ich.id}/${Date.now()}.${(video.name.split(".").pop() || "mov").toLowerCase()}`;
+      const { error } = await db.storage.from("medien").upload(pfad, video, { cacheControl: "31536000" });
       if (error) throw error;
+      pfade.push(pfad);
     } else {
-      pfad = await bildHochladen(datei);
+      for (const d of dateien) pfade.push(await bildHochladen(d));
     }
-    const { error } = await db.from("posts").insert({ datei_pfad: pfad, typ: istVideo ? "video" : "foto", alarm_id: alarmId, zu_spaet: zuSpaet });
+    const { error } = await db.from("posts").insert({
+      datei_pfad: pfade[0], weitere_pfade: pfade.slice(1), typ: video ? "video" : "foto", alarm_id: alarmId, zu_spaet: zuSpaet
+    });
     if (error) throw error;
     toast("Gepostet ✓");
+    window.scrollTo({ top: 0, behavior: "smooth" });
     ladeFeed();
   } catch (e) {
     fehler(e);
-  } finally {
-    feld.value = "";
   }
 }
 
 /* ---------- Feed ---------- */
+let feedAnzahl = 20, feedLaedt = false;
 function ladeFeed() {
-  zeigeMitCache("feed", async () => {
-    const posts = await hol(db.from("posts").select("*, reaktionen(*), kommentare(*)").order("erstellt_um", { ascending: false }).limit(30));
-    await bildUrlsHolen(posts.map(p => p.datei_pfad));
+  const anzahl = feedAnzahl;
+  feedLaedt = true;
+  return zeigeMitCache("feed", async () => {
+    const posts = await hol(db.from("posts").select("*, reaktionen(*), kommentare(*)").order("erstellt_um", { ascending: false }).limit(anzahl));
+    await bildUrlsHolen(posts.flatMap(p => [p.datei_pfad, ...(p.weitere_pfade || [])]));
     return posts;
-  }, posts => feedZeichnen(posts || []));
+  }, (posts, ausSpeicher) => feedZeichnen(posts || [], !ausSpeicher && (posts || []).length >= anzahl))
+    .finally(() => { feedLaedt = false; });
+}
+function mehrLaden() {
+  if (feedLaedt) return;
+  feedAnzahl += 20;
+  ladeFeed();
+}
+const feedBeobachter = "IntersectionObserver" in window
+  ? new IntersectionObserver(e => { if (e.some(x => x.isIntersecting)) mehrLaden(); }, { rootMargin: "400px" }) : null;
+
+function galerieHtml(p) {
+  const alle = [p.datei_pfad, ...(p.weitere_pfade || [])];
+  if (alle.length === 1) return `<img src="${bildUrl(p.datei_pfad)}" class="laedt" decoding="async" onload="this.classList.remove('laedt')" alt="">`;
+  return `<div class="galerie">
+    <div class="galerie-spur" onscroll="galeriePunkte(this)">${alle.map(x => `<img src="${bildUrl(x)}" decoding="async" loading="lazy" alt="">`).join("")}</div>
+    <div class="galerie-punkte">${alle.map((_, i) => `<span class="${i ? "" : "an"}"></span>`).join("")}</div>
+    <div class="galerie-zahl">1/${alle.length}</div>
+  </div>`;
+}
+function galeriePunkte(spur) {
+  const i = Math.round(spur.scrollLeft / spur.clientWidth);
+  const g = spur.parentElement;
+  g.querySelectorAll(".galerie-punkte span").forEach((s, n) => s.classList.toggle("an", n === i));
+  g.querySelector(".galerie-zahl").textContent = `${i + 1}/${spur.children.length}`;
 }
 
-function feedZeichnen(posts) {
+function feedZeichnen(posts, gibtMehr = false) {
   const feed = document.createDocumentFragment();
   for (const p of posts) {
     const url = bildUrl(p.datei_pfad);
     const medium = p.typ === "video"
       ? `<video src="${url}" controls playsinline preload="metadata"></video>`
-      : `<img src="${url}" class="laedt" decoding="async" onload="this.classList.remove('laedt')" alt="">`;
+      : galerieHtml(p);
     const reaktionen = p.reaktionen || [];
     const herzVonMir = reaktionen.some(r => r.emoji === "❤️" && r.user_id === ich.id);
     const chips = [...new Set(reaktionen.map(r => r.emoji))].map(e => {
@@ -834,6 +919,11 @@ function feedZeichnen(posts) {
     feed.appendChild(div);
   }
   if (!posts.length) feed.appendChild(Object.assign(document.createElement("div"), { innerHTML: leer("Noch keine Fotos – tipp auf die Kamera unten rechts.", "camera") }));
+  let mehr = null;
+  if (gibtMehr) {
+    mehr = Object.assign(document.createElement("button"), { className: "knopf zweit mehr-laden", innerHTML: '<i class="ti ti-history"></i> Ältere Fotos laden', onclick: mehrLaden });
+    feed.appendChild(mehr);
+  }
 
   const offen = {};
   document.querySelectorAll('#feed input[id^="k"]').forEach(f => { if (f.value) offen[f.id] = f.value; });
@@ -843,6 +933,7 @@ function feedZeichnen(posts) {
   window.scrollTo(0, y);
   for (const [id, wert] of Object.entries(offen)) if ($(id)) $(id).value = wert;
   if (fokus && /^k\d+$/.test(fokus)) $(fokus)?.focus();
+  if (mehr && feedBeobachter) { feedBeobachter.disconnect(); feedBeobachter.observe(mehr); }
 }
 
 async function reagieren(postId, emoji) {
@@ -872,7 +963,7 @@ document.addEventListener("click", async ev => {
   const bild = ev.target.closest("img");
   if (!bild || !bild.closest("#app") || bild.closest(".kommentar, .blatt") || bild.hasAttribute("onclick")) return;
   const post = bild.closest(".feed-post");
-  const imFeed = post && bild.parentElement === post;
+  const imFeed = post && (bild.parentElement === post || bild.closest(".galerie"));
   const jetzt = Date.now();
   if (imFeed && letzterTipp.bild === bild && jetzt - letzterTipp.zeit < 300) {
     clearTimeout(letzterTipp.timer);
@@ -1017,23 +1108,21 @@ async function pushAktivieren() {
   if (await tun(db.from("push_abos").upsert({ abo: abo.toJSON() }, { onConflict: "user_id,abo", ignoreDuplicates: true }))) toast("Benachrichtigungen an ✓");
 }
 
+let pushAktiv = false;
 async function pushStatusZeigen() {
-  const glocke = $("glocke");
-  let aktiv = false;
+  pushAktiv = false;
   try {
     if ("serviceWorker" in navigator && "PushManager" in window && Notification.permission === "granted") {
       const reg = await navigator.serviceWorker.getRegistration();
-      aktiv = !!(reg && await reg.pushManager.getSubscription());
+      pushAktiv = !!(reg && await reg.pushManager.getSubscription());
     }
   } catch (e) {}
-  glocke.dataset.aktiv = aktiv ? "1" : "";
-  glocke.classList.toggle("aus", !aktiv);
-  glocke.innerHTML = `<i class="ti ${aktiv ? "ti-bell" : "ti-bell-off"}"></i>`;
+  return pushAktiv;
 }
 
 async function pushUmschalten() {
-  if ($("glocke").dataset.aktiv) {
-    if (!await frage("Benachrichtigungen auf diesem Handy ausschalten?", { ja: "Ausschalten", details: "Du bekommst dann keine Fotos-Alarme und Erinnerungen mehr." })) return;
+  if (pushAktiv) {
+    if (!await frage("Benachrichtigungen auf diesem Handy ausschalten?", { ja: "Ausschalten", details: "Du bekommst dann gar keine Nachrichten mehr von der App." })) return;
     const reg = await navigator.serviceWorker.getRegistration();
     const abo = reg && await reg.pushManager.getSubscription();
     if (abo) {
@@ -1044,7 +1133,101 @@ async function pushUmschalten() {
   } else {
     await pushAktivieren();
   }
-  pushStatusZeigen();
+  return pushStatusZeigen();
+}
+
+/* =========================================================
+   Einstellungen
+   ========================================================= */
+const BENACHRICHTIGUNGEN = [
+  ["alarm", "Täglicher Foto-Alarm", "Wenn es Zeit für ein Foto ist"],
+  ["fotos", "Neue Fotos", "Wenn gepostet wurde"],
+  ["kommentare", "Kommentare", "Texte, GIFs und Sticker"],
+  ["reaktionen", "Reaktionen", "Herzen und Emojis auf Fotos"],
+  ["dates", "Dates", "Liste, ABC-Dates, Wünsche, Treffen"],
+  ["activity", "Activity", "Watchlist, Orte, Kochbuch"],
+  ["recap", "Recap", "Essen und Gefühls-Check-ins"],
+  ["tipps", "Erinnerungen der App", "Essen, Check-in, Zugticket, ABC, Rückblick"]
+];
+
+async function einstellungen() {
+  const meine = () => leute.find(p => p.user_id === ich.id) || {};
+  await pushStatusZeigen();
+  const b = blatt(`<div id="einst"></div>`, { klasse: "hoch" });
+  const zeichnen = () => {
+    const stumm = meine().stumm || [];
+    b.el.querySelector("#einst").innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        ${avatar(ich.id, "gross")}
+        <div style="font-size:20px;font-weight:700;margin-top:8px">${schuetzen(nameVon(ich.id))}</div>
+        <button class="knopf zweit klein" style="margin-top:8px" data-a="bild"><i class="ti ti-camera"></i> Profilbild ändern</button>
+      </div>
+      <div class="abschnitt">Benachrichtigungen</div>
+      <div class="karte" style="padding:4px 16px">
+        <div class="einstellung"><div class="inhalt"><div class="haupt"><b>Auf diesem Handy</b></div><div class="neben">${pushAktiv ? "Push-Nachrichten sind an" : "Push-Nachrichten sind aus"}</div></div>
+          <button class="schalter ${pushAktiv ? "an" : ""}" data-a="push" aria-label="Push an oder aus"></button></div>
+      </div>
+      <div class="karte" style="padding:4px 16px;${pushAktiv ? "" : "opacity:.5"}">
+        ${BENACHRICHTIGUNGEN.map(([id, titel, text]) => `
+          <div class="einstellung"><div class="inhalt"><div class="haupt">${titel}</div><div class="neben">${text}</div></div>
+            <button class="schalter ${stumm.includes(id) ? "" : "an"}" data-art="${id}" aria-label="${titel}"></button></div>`).join("")}
+        <div class="meta" style="padding:8px 0 10px">Erinnerungen von ${schuetzen(nameVon(andererId()))}, fällige To-dos und die Abhol-Erinnerung kommen immer.</div>
+      </div>
+      <div class="abschnitt">App</div>
+      <div class="karte" style="padding:4px 16px">
+        <div class="einstellung" data-a="neu" style="cursor:pointer"><i class="ti ti-refresh" style="font-size:20px;color:var(--text2)"></i><div class="inhalt"><div class="haupt">App neu laden</div></div></div>
+        <div class="einstellung" data-a="raus" style="cursor:pointer;color:var(--rot)"><i class="ti ti-logout" style="font-size:20px"></i><div class="inhalt"><div class="haupt">Abmelden</div></div></div>
+      </div>
+      <div class="meta" style="text-align:center;margin-top:8px">Servus 🥨 · Version 2</div>`;
+  };
+  zeichnen();
+  b.el.addEventListener("click", async e => {
+    const k = e.target.closest("[data-a], [data-art]");
+    if (!k) return;
+    if (k.dataset.art) {
+      const stumm = new Set(meine().stumm || []);
+      stumm.has(k.dataset.art) ? stumm.delete(k.dataset.art) : stumm.add(k.dataset.art);
+      k.classList.toggle("an");
+      const liste = [...stumm];
+      if (await tun(db.from("personen").update({ stumm: liste }).eq("user_id", ich.id))) { meine().stumm = liste; speicher.schreiben("leute", leute); }
+      else zeichnen();
+      return;
+    }
+    const a = k.dataset.a;
+    if (a === "push") { await pushUmschalten(); zeichnen(); }
+    if (a === "neu") location.reload();
+    if (a === "raus") {
+      if (!await frage("Wirklich abmelden?", { ja: "Abmelden", gefahr: true })) return;
+      await db.auth.signOut();
+      localStorage.clear();
+      location.reload();
+    }
+    if (a === "bild") {
+      const f = document.createElement("input");
+      f.type = "file"; f.accept = "image/*"; f.className = "versteckt";
+      document.body.appendChild(f);
+      f.onchange = async () => {
+        const d = f.files[0]; f.remove();
+        if (!d) return;
+        try {
+          toast("Wird hochgeladen …");
+          const blob = await bildVerkleinern(d, 400);
+          const pfad = `${ich.id}/profil-${Date.now()}.jpg`;
+          const { error } = await db.storage.from("medien").upload(pfad, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
+          if (error) throw error;
+          if (!await tun(db.from("personen").update({ bild_pfad: pfad }).eq("user_id", ich.id))) return;
+          meine().bild_pfad = pfad;
+          await bildUrlsHolen([pfad]);
+          speicher.schreiben("leute", leute);
+          profilKnopfZeigen();
+          zeichnen();
+          seiteAktualisieren();
+          toast("Profilbild gespeichert ✓");
+        } catch (err) { fehler(err); }
+      };
+      f.click();
+    }
+  });
 }
 
 /* =========================================================
