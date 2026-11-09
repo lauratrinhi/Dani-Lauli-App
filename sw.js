@@ -1,5 +1,5 @@
 /* Servus – Hintergrund-Helfer: Push-Nachrichten + Offline-Speicher */
-const VERSION = "servus-v2";
+const VERSION = "servus-v3";
 const APP_DATEIEN = ["./", "index.html", "bereiche.js", "manifest.json", "icon.png"];
 
 self.addEventListener("install", event => {
