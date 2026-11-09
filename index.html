@@ -8,6 +8,16 @@
 <title>Servus🥨</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.png">
+<script>
+  // Nach dem Neuladen nicht kurz "Home" zeigen, wenn man vorher woanders war
+  try {
+    const vorher = JSON.parse(sessionStorage.getItem("navAktuell"));
+    if (vorher && vorher !== "heute") {
+      document.documentElement.classList.add("nav-zurueck");
+      setTimeout(() => document.documentElement.classList.remove("nav-zurueck"), 5000);
+    }
+  } catch (e) {}
+</script>
 <style>
   body { font-family: -apple-system, sans-serif; margin: 0; background: #f4f6fb; color: #333; }
   header { background: #1f3a68; color: white; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); text-align: center; font-size: 20px; font-weight: 600; }
@@ -23,6 +33,7 @@
   .kommentar { font-size: 14px; margin: 4px 0; }
   .versteckt { display: none; }
   .grau { width: auto; background: #f3f3f3; color: #333; }
+  .nav-zurueck #app { visibility: hidden; }
 </style>
 </head>
 <body>
