@@ -63,6 +63,42 @@ function segmentHtml(optionen, aktiv, fn) {
 const mehrKnopf = (fn, text, icon = "plus") => `<button class="knopf zweit" style="margin-bottom:14px" onclick="${fn}"><i class="ti ti-${icon}"></i> ${text}</button>`;
 const istAktuell = id => aktuelleSeite === id;
 
+/* ---- Würfeln (gleich in Orte, Kochbuch und Watchlist) ---- */
+const wuerfelKnopf = fn => `<button class="knopf" onclick="${fn}"><i class="ti ti-dice-5"></i> Würfeln</button>`;
+function wuerfelZiehen(liste, letzte, gewicht = () => 1) {
+  const auswahl = liste.length > 1 ? liste.filter(x => x !== letzte) : liste;
+  let r = Math.random() * auswahl.reduce((s, x) => s + gewicht(x), 0);
+  return auswahl.find(x => (r -= gewicht(x)) <= 0) || auswahl[0];
+}
+function wuerfelFeld(text) {
+  return `<div style="text-align:center;padding:8px 0 4px">
+    <i class="ti ti-dice-5 w-wuerfel" style="font-size:44px;color:var(--blau-text);display:inline-block;transition:transform .12s"></i>
+    <div class="meta">${text}</div>
+    <div class="w-name" style="font-weight:800;font-size:26px;margin:4px 0;min-height:34px"></div>
+    <div class="w-mehr"></div>
+  </div>`;
+}
+async function wuerfelDrehen(box, namen, ende, aktiv) {
+  const nameEl = box.querySelector(".w-name"), wuerfel = box.querySelector(".w-wuerfel");
+  if (namen.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    let pause = 50;
+    for (let i = 0; i < 12; i++) {
+      if (!aktiv()) return false;
+      nameEl.textContent = namen[Math.floor(Math.random() * namen.length)];
+      wuerfel.style.transform = `rotate(${(i + 1) * 30}deg)`;
+      await new Promise(r => setTimeout(r, pause));
+      pause *= 1.17;
+    }
+    wuerfel.style.transform = "";
+  }
+  if (!aktiv()) return false;
+  nameEl.textContent = ende;
+  return true;
+}
+const wuerfelKnoepfe = ok => `<div class="reihe" style="margin-top:14px">
+  <button class="knopf zweit" data-a="nochmal"><i class="ti ti-refresh"></i> Nochmal</button>
+  <button class="knopf" data-a="ok">${ok}</button></div>`;
+
 /* =========================================================
    DATES · Liste
    ========================================================= */
@@ -424,7 +460,7 @@ B.watch = {
         return `<div class="kommentar"><span class="meta">${wo}</span> · <b>${schuetzen(nameVon(b.user_id))}</b> <span class="sterne">${sterneText(b.sterne)}</span>${b.kommentar ? "<br>" + schuetzen(b.kommentar) : ""}</div>`;
       }).join("");
 
-      return `<div class="karte">
+      return `<div class="karte" id="watch-${e.id}">
         <div class="reihe" style="align-items:flex-start">
           <i class="ti ti-${e.art === "film" ? "movie" : "device-tv"}" style="font-size:22px;color:var(--text2);margin-top:2px"></i>
           <div style="flex:1;min-width:0">
@@ -440,11 +476,56 @@ B.watch = {
 
     setzeHtml(el, `
       ${segmentHtml([["laeuft", `Gerade (${zahl("laeuft")})`], ["geplant", `Geplant (${zahl("geplant")})`], ["gesehen", `Gesehen (${zahl("gesehen")})`]], this.ansicht, "B.watch.wechsel")}
-      ${mehrKnopf("B.watch.neu()", "Film oder Serie eintragen")}
+      ${this.ansicht === "geplant" ? `<div class="reihe" style="margin-bottom:14px">${wuerfelKnopf("B.watch.wuerfeln()")}<button class="knopf zweit" onclick="B.watch.neu()"><i class="ti ti-plus"></i> Eintragen</button></div>` : mehrKnopf("B.watch.neu()", "Film oder Serie eintragen")}
       ${sichtbar.map(karte).join("") || leer(...leerText[this.ansicht])}`);
   },
 
   wechsel(s) { this.ansicht = s; this.zeichnen(document.getElementById("seite-watchlist")); },
+
+  /* ---- Würfeln: Was schauen wir heute? ---- */
+  _filter: "alle",
+  _letzte: null,
+  wuerfeln() {
+    const FILTER = [["alle", "Alles"], ["film", "Filme"], ["serie", "Serien"]];
+    const geplant = this._daten.eintraege.filter(e => e.status === "geplant");
+    if (!geplant.length) return toast("Bei „Geplant“ steht noch nichts.", "fehler");
+    const b = blatt(`<h3>Was schauen wir heute?</h3><div class="chips w-quellen"></div><div class="w-inhalt"></div>`);
+    let runde = 0;
+    const zeigen = async () => {
+      const passend = f => geplant.filter(e => f === "alle" || e.art === f);
+      b.el.querySelector(".w-quellen").innerHTML = FILTER.map(([k, n]) =>
+        `<button class="chip ${k === this._filter ? "aktiv" : ""}" data-q="${k}">${n} (${passend(k).length})</button>`).join("");
+      const inhalt = b.el.querySelector(".w-inhalt");
+      const liste = passend(this._filter);
+      if (!liste.length) {
+        inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">Bei „Geplant“ ${this._filter === "film" ? "steht gerade kein Film" : "steht gerade keine Serie"}.</div>`;
+        return;
+      }
+      const wahl = wuerfelZiehen(liste, liste.find(e => e.id === this._letzte));
+      this._letzte = wahl.id;
+      const meine = ++runde;
+      inhalt.innerHTML = wuerfelFeld("Heute schauen wir …");
+      if (!await wuerfelDrehen(inhalt, liste.map(e => e.titel), wahl.titel, () => meine === runde && b.hg.isConnected)) return;
+      inhalt.querySelector(".w-mehr").innerHTML = `
+        <div class="meta">${wahl.art === "film" ? "Film" : "Serie"}${wahl.plattform ? " · " + schuetzen(wahl.plattform) : ""} · von ${schuetzen(nameVon(wahl.user_id))}</div>
+        ${wuerfelKnoepfe('<i class="ti ti-player-play"></i> Anfangen')}`;
+      inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
+      inhalt.querySelector('[data-a="ok"]').onclick = async () => {
+        b.zu();
+        await this.status(wahl.id, "laeuft");
+        toast("Viel Spaß beim Schauen!");
+      };
+    };
+    b.el.querySelector(".w-quellen").addEventListener("click", e => {
+      const k = e.target.closest("[data-q]");
+      if (!k || k.dataset.q === this._filter) return;
+      this._filter = k.dataset.q;
+      this._letzte = null;
+      zeigen();
+    });
+    zeigen();
+  },
+
   finden(id) { return this._daten.eintraege.find(e => e.id === id); },
 
   neu() {
@@ -588,7 +669,7 @@ B.orte = {
         <button class="chip" onclick="B.orte.neueStadt()"><i class="ti ti-plus"></i> Stadt</button></div>
       ${segmentHtml(Object.entries(ORT_ARTEN).map(([k, [p]]) => [k, `${p} (${orte.filter(o => o.stadt === this.stadt && o.art === k).length})`]), this.art, "B.orte.artWahl")}
       <div class="reihe" style="margin-bottom:14px">
-        <button class="knopf" onclick="B.orte.zufall()"><i class="ti ti-dice-5"></i> Zufall</button>
+        ${wuerfelKnopf("B.orte.zufall()")}
         <button class="knopf zweit" onclick="B.orte.neu()"><i class="ti ti-plus"></i> Neuer Ort</button>
       </div>
       ${geplant.length ? `<div class="abschnitt">Wollen wir hin</div>${geplant.map(karte).join("")}` : ""}
@@ -663,24 +744,26 @@ B.orte = {
     const kandidaten = this._daten.orte.filter(o => o.stadt === this.stadt && o.art === this.art);
     if (!kandidaten.length) return toast(`Noch keine ${ORT_ARTEN[this.art][0]} in ${this.stadt} eingetragen.`, "fehler");
     const gewicht = o => !o.besucht ? 3 : Math.max(1, this.wertung(o) || 2);
-    let r = Math.random() * kandidaten.reduce((s, o) => s + gewicht(o), 0);
-    const t = kandidaten.find(o => (r -= gewicht(o)) <= 0) || kandidaten[0];
-    const b = blatt(`
-      <div style="text-align:center">
-        <i class="ti ti-dice-5" style="font-size:44px;color:var(--blau-text)"></i>
-        <div class="meta">Heute geht's ins …</div>
-        <div style="font-weight:800;font-size:26px;margin:4px 0">${schuetzen(t.name)}</div>
+    const b = blatt(`<h3>Wohin gehen wir?</h3><div class="w-inhalt"></div>`);
+    let runde = 0, letzte = null;
+    const zeigen = async () => {
+      const t = wuerfelZiehen(kandidaten, letzte, gewicht);
+      letzte = t;
+      const meine = ++runde;
+      const inhalt = b.el.querySelector(".w-inhalt");
+      inhalt.innerHTML = wuerfelFeld("Heute geht's ins …");
+      if (!await wuerfelDrehen(inhalt, kandidaten.map(o => o.name), t.name, () => meine === runde && b.hg.isConnected)) return;
+      inhalt.querySelector(".w-mehr").innerHTML = `
         <div class="meta">${t.kueche ? schuetzen(t.kueche) + " · " : ""}${t.besucht ? "Waren wir schon" : "Neu für euch"}</div>
-        <a class="knopf zweit" style="margin:12px 0" href="${this.karten(t)}" target="_blank" rel="noopener"><i class="ti ti-route"></i> Route anzeigen</a>
-        <div class="reihe"><button class="knopf zweit" data-a="nochmal"><i class="ti ti-refresh"></i> Nochmal</button><button class="knopf" data-a="ok">Passt!</button></div>
-      </div>`, { mitte: true });
-    b.el.addEventListener("click", e => {
-      const k = e.target.closest("[data-a]");
-      if (!k) return;
-      b.zu();
-      if (k.dataset.a === "nochmal") this.zufall();
-      else document.getElementById("ort-" + t.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+        <a class="knopf zweit" style="margin-top:12px" href="${this.karten(t)}" target="_blank" rel="noopener"><i class="ti ti-route"></i> Route anzeigen</a>
+        ${wuerfelKnoepfe('<i class="ti ti-check"></i> Passt!')}`;
+      inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
+      inhalt.querySelector('[data-a="ok"]').onclick = () => {
+        b.zu();
+        document.getElementById("ort-" + t.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      };
+    };
+    zeigen();
   }
 };
 
@@ -723,7 +806,7 @@ B.koch = {
     setzeHtml(el, `
       ${segmentHtml([["offen", `Rezepte (${this._daten.filter(r => !r.gekocht).length})`], ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`]], this.ansicht, "B.koch.wechsel")}
       <div class="reihe" style="margin-bottom:14px">
-        <button class="knopf" onclick="B.koch.wuerfeln()"><i class="ti ti-dice-5"></i> Würfeln</button>
+        ${wuerfelKnopf("B.koch.wuerfeln()")}
         <button class="knopf zweit" onclick="B.koch.neu()"><i class="ti ti-plus"></i> Neues Gericht</button>
       </div>
       ${liste.map(r => `<div class="karte" id="rezept-${r.id}" style="padding:0;overflow:hidden">
@@ -801,34 +884,11 @@ B.koch = {
         inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">${this._quelle === "gekocht" ? "Ihr habt noch nichts als gekocht markiert." : this._quelle === "liste" ? "Bei Rezepte steht gerade nichts." : "Alle Ideen stehen schon in eurem Kochbuch."}</div>`;
         return;
       }
-      let auswahl = liste;
-      if (liste.length > 1) auswahl = liste.filter(r => r.titel !== this._letzte);
-      const wahl = auswahl[Math.floor(Math.random() * auswahl.length)];
+      const wahl = wuerfelZiehen(liste, liste.find(r => r.titel === this._letzte));
       this._letzte = wahl.titel;
       const meine = ++runde;
-
-      inhalt.innerHTML = `
-        <div style="text-align:center;padding:8px 0 4px">
-          <i class="ti ti-dice-5 w-wuerfel" style="font-size:44px;color:var(--blau-text);display:inline-block;transition:transform .12s"></i>
-          <div class="meta">Heute kochen wir …</div>
-          <div class="w-name" style="font-weight:800;font-size:26px;margin:4px 0;min-height:34px"></div>
-          <div class="w-mehr"></div>
-        </div>`;
-      const nameEl = inhalt.querySelector(".w-name");
-      const wuerfel = inhalt.querySelector(".w-wuerfel");
-      if (liste.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        let pause = 50;
-        for (let i = 0; i < 12; i++) {
-          if (meine !== runde || !b.hg.isConnected) return;
-          nameEl.textContent = liste[Math.floor(Math.random() * liste.length)].titel;
-          wuerfel.style.transform = `rotate(${(i + 1) * 30}deg)`;
-          await new Promise(r => setTimeout(r, pause));
-          pause *= 1.17;
-        }
-        wuerfel.style.transform = "";
-      }
-      if (meine !== runde || !b.hg.isConnected) return;
-      nameEl.textContent = wahl.titel;
+      inhalt.innerHTML = wuerfelFeld("Heute kochen wir …");
+      if (!await wuerfelDrehen(inhalt, liste.map(r => r.titel), wahl.titel, () => meine === runde && b.hg.isConnected)) return;
 
       const neu = this._quelle === "ideen";
       const link = wahl.link && /^https?:\/\//i.test(wahl.link) ? wahl.link : null;
@@ -836,10 +896,7 @@ B.koch = {
         <div class="meta">${neu ? "Neue Idee für euch" : this._quelle === "gekocht" ? "Habt ihr schon mal gekocht" : "Aus euren Rezepten"}</div>
         ${wahl.rezept ? `<details style="margin-top:8px;text-align:left"><summary>Rezept anzeigen <i class="ti ti-chevron-down"></i></summary><div class="kommentar" style="white-space:pre-wrap;margin-top:8px">${schuetzen(wahl.rezept)}</div></details>` : ""}
         ${link ? `<a class="knopf zweit" style="margin-top:10px" href="${schuetzen(link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Zum Rezept</a>` : ""}
-        <div class="reihe" style="margin-top:14px">
-          <button class="knopf zweit" data-a="nochmal"><i class="ti ti-refresh"></i> Nochmal</button>
-          <button class="knopf" data-a="ok"><i class="ti ti-chef-hat"></i> Machen wir!</button>
-        </div>`;
+        ${wuerfelKnoepfe('<i class="ti ti-chef-hat"></i> Machen wir!')}`;
       inhalt.querySelector('[data-a="ok"]').onclick = async () => {
         if (neu) {
           if (!await tun(db.from("rezepte").insert({ titel: wahl.titel, rezept: wahl.rezept }))) return;
