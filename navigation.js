@@ -9,6 +9,7 @@
   const stil = document.createElement("style");
   stil.textContent = `
     body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+    #app > div[style*="position:sticky"], #app > div[style*="position: sticky"] { display:none !important; }
     #untenLeiste { position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex; background:#fff;
       border-top:1px solid #e5e7eb; padding:6px 0 calc(6px + env(safe-area-inset-bottom)); }
     #untenLeiste button { flex:1; background:none; color:#9ca3af; border:none; margin:0; padding:10px 0 6px;
@@ -108,15 +109,11 @@
     setInterval(punkteSpiegeln, 2000);
   }
 
-  const alle = BEREICHE.flatMap(b => b.reiter.map(([id]) => id));
-  let versuche = 0;
   const warte = setInterval(() => {
-    versuche++;
     const app = document.getElementById("app");
-    const bereit = original("heute") && app && !app.classList.contains("versteckt");
-    if (bereit && (alle.every(original) || versuche > 20)) {
+    if (original("heute") && app && !app.classList.contains("versteckt")) {
       clearInterval(warte);
       einbauen();
     }
-  }, 300);
+  }, 100);
 })();
