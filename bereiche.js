@@ -773,17 +773,38 @@ B.orte = {
 registriereSeite("kochbuch", {
   render(el) {
     zeigeMitCache("kochbuch", async () => {
-      const rezepte = await hol(db.from("rezepte").select("*").order("erstellt_um", { ascending: false }));
+      const [rezepte, einkauf] = await Promise.all([
+        hol(db.from("rezepte").select("*").order("erstellt_um", { ascending: false })),
+        db.from("einkauf").select("*").order("erstellt_um").then(r => r.error ? [] : r.data || [])
+      ]);
       await bildUrlsHolen(rezepte.map(r => r.bild_pfad));
-      return rezepte;
+      return { rezepte, einkauf };
     }, daten => {
       if (!istAktuell("kochbuch")) return;
-      B.koch._daten = daten || [];
+      if (Array.isArray(daten)) daten = { rezepte: daten, einkauf: [] }; // alter Zwischenspeicher
+      B.koch._daten = daten?.rezepte || [];
+      B.koch._einkauf = daten?.einkauf || [];
       B.koch.zeichnen(el);
     });
   }
 });
 
+
+// Liest die Zutaten aus einem Rezepttext: alles vor der Zubereitung, eine Zutat pro Zeile oder mit Komma getrennt.
+function zutatenAus(text) {
+  if (!text) return [];
+  const zeilen = text.split(/\r?\n/).map(z => z.trim());
+  const ergebnis = [];
+  for (let zeile of zeilen) {
+    if (/^(\d+[.)]\s|schritt\b|zubereitung|anleitung|so geht|und so)/i.test(zeile)) break;
+    zeile = zeile.replace(/^(zutaten|für\s+\d+(\s*(personen|portionen|pers\.))?)\s*:?\s*/i, "").replace(/^[-–•*·]\s*/, "");
+    for (let teil of zeile.split(/,(?!\d)|;/)) {
+      teil = teil.trim().replace(/^[-–•*·]\s*/, "").replace(/[.]$/, "");
+      if (teil && /\p{L}/u.test(teil) && teil.length <= 80 && !ergebnis.includes(teil)) ergebnis.push(teil);
+    }
+  }
+  return ergebnis.slice(0, 40);
+}
 
 const KOCH_IDEEN = [
   { titel: "Spaghetti Carbonara", rezept: "Für 2: 250 g Spaghetti, 100 g Guanciale oder Speck, 2 Eier + 1 Eigelb, 50 g Pecorino oder Parmesan, Pfeffer\n\n1. Spaghetti in Salzwasser kochen, eine Tasse Nudelwasser aufheben.\n2. Speck in der Pfanne knusprig braten.\n3. Eier mit geriebenem Käse und viel Pfeffer verquirlen.\n4. Herd aus, Nudeln zum Speck geben, Eiermasse und etwas Nudelwasser unterrühren, bis es cremig ist." },
@@ -800,11 +821,17 @@ const KOCH_IDEEN = [
 B.koch = {
   _daten: [],
   ansicht: "offen",
+  _einkauf: [],
   zeichnen(el) {
+    const segment = segmentHtml([
+      ["offen", `Rezepte (${this._daten.filter(r => !r.gekocht).length})`],
+      ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`],
+      ["einkauf", `Einkauf (${this._einkauf.filter(e => !e.erledigt).length})`]], this.ansicht, "B.koch.wechsel");
+    if (this.ansicht === "einkauf") return this.zeichneEinkauf(el, segment);
     const gekocht = this.ansicht === "gekocht";
     const liste = this._daten.filter(r => !!r.gekocht === gekocht);
     setzeHtml(el, `
-      ${segmentHtml([["offen", `Rezepte (${this._daten.filter(r => !r.gekocht).length})`], ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`]], this.ansicht, "B.koch.wechsel")}
+      ${segment}
       <div class="reihe" style="margin-bottom:14px">
         ${wuerfelKnopf("B.koch.wuerfeln()")}
         <button class="knopf zweit" onclick="B.koch.neu()"><i class="ti ti-plus"></i> Neues Gericht</button>
@@ -817,9 +844,9 @@ B.koch = {
           ${r.rezept ? `<details style="margin-top:6px"><summary>Rezept anzeigen <i class="ti ti-chevron-down"></i></summary><div class="kommentar" style="white-space:pre-wrap;margin-top:8px">${schuetzen(r.rezept)}</div></details>` : ""}
           ${r.link && /^https?:\/\//i.test(r.link) ? `<a class="meta" style="display:inline-flex;gap:4px;align-items:center;color:var(--blau-text)" href="${schuetzen(r.link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Zum Rezept</a>` : ""}
           <div class="reihe" style="margin-top:12px">
-            <button class="knopf ${r.gekocht ? "zweit" : ""}" onclick="B.koch.umschalten(${r.id}, ${!!r.gekocht})"><i class="ti ti-${r.gekocht ? "repeat" : "chef-hat"}"></i> ${r.gekocht ? "Nochmal kochen" : "Gekocht!"}</button>
-            <button class="icon-knopf rund" onclick="B.koch.bild(${r.id})" aria-label="Bild ändern"><i class="ti ti-camera-plus"></i></button>
-            <button class="icon-knopf" onclick="B.koch.loeschen(${r.id})" aria-label="Löschen"><i class="ti ti-trash"></i></button>
+            <button class="knopf" onclick="B.koch.heuteKochen(${r.id})"><i class="ti ti-shopping-cart"></i> Heute kochen</button>
+            ${r.gekocht ? "" : `<button class="knopf zweit" onclick="B.koch.umschalten(${r.id}, false)"><i class="ti ti-chef-hat"></i> Gekocht!</button>`}
+            <button class="icon-knopf rund" onclick="B.koch.mehr(${r.id})" aria-label="Mehr"><i class="ti ti-dots"></i></button>
           </div>
         </div>
       </div>`).join("") || leer(gekocht ? "Noch nichts gekocht" : "Noch keine Gerichte eingetragen", "chef-hat")}`);
@@ -898,19 +925,10 @@ B.koch = {
         ${link ? `<a class="knopf zweit" style="margin-top:10px" href="${schuetzen(link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Zum Rezept</a>` : ""}
         ${wuerfelKnoepfe('<i class="ti ti-chef-hat"></i> Machen wir!')}`;
       inhalt.querySelector('[data-a="ok"]').onclick = async () => {
-        if (neu) {
-          if (!await tun(db.from("rezepte").insert({ titel: wahl.titel, rezept: wahl.rezept }))) return;
-          b.zu();
-          this.ansicht = "offen";
-          toast("Steht jetzt bei euren Rezepten ✓");
-          seiteAktualisieren();
-        } else {
-          b.zu();
-          this.ansicht = wahl.gekocht ? "gekocht" : "offen";
-          this.zeichnen(document.getElementById("seite-kochbuch"));
-          toast("Guten Appetit!");
-          setTimeout(() => document.getElementById("rezept-" + wahl.id)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
-        }
+        if (neu && !await tun(db.from("rezepte").insert({ titel: wahl.titel, rezept: wahl.rezept }))) return;
+        b.zu();
+        if (neu) { this.ansicht = "offen"; seiteAktualisieren(); }
+        this.einkaufBlatt(wahl.titel, wahl.rezept);
       };
       inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
     };
@@ -923,6 +941,133 @@ B.koch = {
       zeigen();
     });
     zeigen();
+  },
+
+  /* ---- Heute kochen → Einkaufsliste ---- */
+  heuteKochen(id) {
+    const r = this._daten.find(x => x.id === id);
+    if (r) this.einkaufBlatt(r.titel, r.rezept);
+  },
+
+  einkaufBlatt(titel, rezept) {
+    const zutaten = zutatenAus(rezept);
+    const b = blatt(`
+      <h3>${schuetzen(titel)}</h3>
+      <div class="meta">${zutaten.length ? "Tippe weg, was ihr schon zu Hause habt." : "Bei diesem Rezept stehen keine Zutaten – trag sie einfach hier ein."}</div>
+      <div class="ek-liste" style="margin:10px 0"></div>
+      <div class="reihe" style="margin-bottom:14px">
+        <input class="ek-neu" placeholder="Weitere Zutat …" enterkeyhint="done" style="margin:0;flex:1">
+        <button class="icon-knopf rund ek-plus" aria-label="Hinzufügen"><i class="ti ti-plus"></i></button>
+      </div>
+      <div class="reihe">
+        <button class="knopf zweit" data-a="nein">Ohne Einkaufen</button>
+        <button class="knopf ek-ok"></button>
+      </div>`);
+    const liste = zutaten.map(text => ({ text, an: true }));
+    const zeigen = () => {
+      b.el.querySelector(".ek-liste").innerHTML = liste.map((z, i) => `
+        <div class="zeile"><button class="kreis ${z.an ? "an" : ""}" data-i="${i}" aria-label="Kaufen"><i class="ti ti-check"></i></button>
+          <div class="inhalt"><div class="haupt" style="${z.an ? "" : "text-decoration:line-through;color:var(--text3)"}">${schuetzen(z.text)}</div></div></div>`).join("");
+      const n = liste.filter(z => z.an).length;
+      const ok = b.el.querySelector(".ek-ok");
+      ok.innerHTML = `<i class="ti ti-shopping-cart"></i> ${n ? `Auf die Liste (${n})` : "Nichts zu kaufen"}`;
+    };
+    const dazu = () => {
+      const feld = b.el.querySelector(".ek-neu");
+      const text = feld.value.trim();
+      if (!text) return;
+      liste.push({ text, an: true });
+      feld.value = "";
+      zeigen();
+      feld.focus();
+    };
+    b.el.querySelector(".ek-plus").onclick = dazu;
+    b.el.querySelector(".ek-neu").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); dazu(); } });
+    b.el.querySelector(".ek-liste").addEventListener("click", e => {
+      const k = e.target.closest("[data-i]");
+      if (!k) return;
+      liste[k.dataset.i].an = !liste[k.dataset.i].an;
+      zeigen();
+    });
+    b.el.querySelector('[data-a="nein"]').onclick = () => { b.zu(); toast("Guten Appetit!"); };
+    b.el.querySelector(".ek-ok").onclick = async () => {
+      const kaufen = liste.filter(z => z.an);
+      if (!kaufen.length) { b.zu(); toast("Guten Appetit!"); return; }
+      if (!await tun(db.from("einkauf").insert(kaufen.map(z => ({ text: z.text, rezept: titel }))))) return;
+      b.zu();
+      toast(`${kaufen.length} ${kaufen.length === 1 ? "Zutat steht" : "Zutaten stehen"} auf der Einkaufsliste ✓`);
+      this.ansicht = "einkauf";
+      if (istAktuell("kochbuch")) seiteAktualisieren();
+    };
+    zeigen();
+  },
+
+  zeichneEinkauf(el, segment) {
+    const gruppen = [];
+    for (const e of this._einkauf) {
+      const name = e.rezept || "Sonstiges";
+      let g = gruppen.find(x => x.name === name);
+      if (!g) gruppen.push(g = { name, eintraege: [] });
+      g.eintraege.push(e);
+    }
+    const abgehakt = this._einkauf.filter(e => e.erledigt).length;
+    const zeile = e => `
+      <div class="zeile"><button class="kreis ${e.erledigt ? "an" : ""}" onclick="B.koch.abhaken(${e.id})" aria-label="Abhaken"><i class="ti ti-check"></i></button>
+        <div class="inhalt"><div class="haupt" style="${e.erledigt ? "text-decoration:line-through;color:var(--text3)" : ""}">${schuetzen(e.text)}</div></div></div>`;
+    setzeHtml(el, `
+      ${segment}
+      <div class="reihe" style="margin-bottom:14px">
+        <input id="ekNeu" placeholder="Etwas auf die Liste …" enterkeyhint="done" style="margin:0;flex:1" onkeydown="if (event.key === 'Enter') { event.preventDefault(); B.koch.einkaufDazu(); }">
+        <button class="icon-knopf rund" onclick="B.koch.einkaufDazu()" aria-label="Hinzufügen"><i class="ti ti-plus"></i></button>
+      </div>
+      ${gruppen.map(g => {
+        const sortiert = g.eintraege.filter(e => !e.erledigt).concat(g.eintraege.filter(e => e.erledigt));
+        return `<div class="karte"><div class="karte-titel">${schuetzen(g.name)}</div>${sortiert.map(zeile).join("")}</div>`;
+      }).join("") || leer("Die Einkaufsliste ist leer – tippe bei einem Rezept auf „Heute kochen“.", "shopping-cart")}
+      ${abgehakt ? `<button class="knopf zweit" style="width:100%" onclick="B.koch.aufraeumen()"><i class="ti ti-trash"></i> Abgehakte entfernen (${abgehakt})</button>` : ""}`);
+  },
+
+  async abhaken(id) {
+    const e = this._einkauf.find(x => x.id === id);
+    if (!e) return;
+    e.erledigt = !e.erledigt;
+    this.zeichnen(document.getElementById("seite-kochbuch"));
+    if (!await tun(db.from("einkauf").update({ erledigt: e.erledigt }).eq("id", id))) {
+      e.erledigt = !e.erledigt;
+      this.zeichnen(document.getElementById("seite-kochbuch"));
+    }
+  },
+
+  async einkaufDazu() {
+    const feld = document.getElementById("ekNeu");
+    const text = feld?.value.trim();
+    if (!text) return;
+    if (await tun(db.from("einkauf").insert({ text, rezept: null }))) { feld.value = ""; seiteAktualisieren(); }
+  },
+
+  async aufraeumen() {
+    if (await tun(db.from("einkauf").delete().eq("erledigt", true))) seiteAktualisieren();
+  },
+
+  mehr(id) {
+    const r = this._daten.find(x => x.id === id);
+    if (!r) return;
+    const zeile = (a, icon, text, farbe = "var(--blau-text)") => `<div class="zeile" data-a="${a}"><i class="ti ti-${icon}" style="font-size:22px;color:${farbe}"></i><div class="inhalt"><div class="haupt" style="${a === "loeschen" ? "color:var(--rot)" : ""}">${text}</div></div></div>`;
+    const b = blatt(`
+      <h3>${schuetzen(r.titel)}</h3>
+      <div class="auswahl-liste">
+        ${zeile("bild", "camera-plus", r.bild_pfad ? "Bild ändern" : "Bild hinzufügen")}
+        ${r.gekocht ? zeile("zurueck", "arrow-back-up", "Zurück zu Rezepte") : ""}
+        ${zeile("loeschen", "trash", "Löschen", "var(--rot)")}
+      </div>`);
+    b.el.addEventListener("click", e => {
+      const k = e.target.closest("[data-a]");
+      if (!k) return;
+      b.zu();
+      if (k.dataset.a === "bild") this.bild(id);
+      else if (k.dataset.a === "zurueck") this.umschalten(id, true);
+      else this.loeschen(id);
+    });
   },
 
   async umschalten(id, war) { if (await tun(db.from("rezepte").update({ gekocht: !war }).eq("id", id))) { toast(war ? "Wieder bei Rezepte" : "Lecker! ✓"); seiteAktualisieren(); } },
