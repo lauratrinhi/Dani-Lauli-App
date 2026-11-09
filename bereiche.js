@@ -63,6 +63,28 @@ function segmentHtml(optionen, aktiv, fn) {
 const mehrKnopf = (fn, text, icon = "plus") => `<button class="knopf zweit" style="margin-bottom:14px" onclick="${fn}"><i class="ti ti-${icon}"></i> ${text}</button>`;
 const istAktuell = id => aktuelleSeite === id;
 
+/* ---- Suche (Kochbuch, Watchlist, Orte) ---- */
+const SUCHE_AB = 6; // Suchfeld erscheint ab so vielen Einträgen
+const passt = (q, ...felder) => felder.some(f => (f || "").toLowerCase().includes(q));
+function sucheHtml(id, platzhalter, wert, fn) {
+  return `<div class="suche"><i class="ti ti-search"></i>
+    <input id="${id}" type="search" placeholder="${platzhalter}" value="${schuetzen(wert || "")}" autocomplete="off" enterkeyhint="search" oninput="${fn}(this.value)" onkeydown="if (event.key === 'Enter') this.blur()">
+    <button class="suche-x" onclick="const f = this.previousElementSibling; f.value = ''; ${fn}('')" aria-label="Suche leeren"><i class="ti ti-x"></i></button></div>`;
+}
+const nichtsGefunden = q => leer(`Nichts gefunden für „${schuetzen(q)}“`, "search");
+
+/* ---- ⋯-Menü für Karten ---- */
+function mehrMenue(titel, eintraege) {
+  const b = blatt(`<h3>${schuetzen(titel)}</h3><div class="auswahl-liste">${eintraege.map(([a, icon, text, rot], i) =>
+    `<div class="zeile" data-i="${i}"><i class="ti ti-${icon}" style="font-size:22px;color:${rot ? "var(--rot)" : "var(--blau-text)"}"></i><div class="inhalt"><div class="haupt" style="${rot ? "color:var(--rot)" : ""}">${text}</div></div></div>`).join("")}</div>`);
+  b.el.addEventListener("click", e => {
+    const k = e.target.closest("[data-i]");
+    if (!k) return;
+    b.zu();
+    eintraege[k.dataset.i][0]();
+  });
+}
+
 /* ---- Würfeln (gleich in Orte, Kochbuch und Watchlist) ---- */
 const wuerfelKnopf = fn => `<button class="knopf" onclick="${fn}"><i class="ti ti-dice-5"></i> Würfeln</button>`;
 function wuerfelZiehen(liste, letzte, gewicht = () => 1) {
@@ -112,11 +134,12 @@ registriereSeite("liste", {
       const zeile = x => `
         <div class="zeile">
           <button class="kreis" onclick="B.liste.fertig(${x.id}, this)" aria-label="Erledigt"><i class="ti ti-check"></i></button>
-          <div class="inhalt">
+          <div class="inhalt" style="cursor:pointer" onclick="B.liste.bearbeiten(${x.id})">
             <div class="haupt">${schuetzen(x.text)}</div>
             <div class="neben">${x.faellig ? `<span style="${x.faellig < heute ? "color:var(--rot);font-weight:600" : ""}">bis ${datumKurz(x.faellig)}</span> · ` : ""}von ${schuetzen(nameVon(x.von))}</div>
           </div>
         </div>`;
+      B.liste._alle = alle;
       const treffen = alle.filter(x => x.art === "treffen");
       const todos = alle.filter(x => x.art === "todo");
       setzeHtml(el, `
@@ -161,6 +184,35 @@ B.liste = {
       if (art === "todo") B.liste._datum = null;
       seiteAktualisieren();
     }
+  },
+  _alle: [],
+  bearbeiten(id) {
+    const x = this._alle.find(e => e.id === id);
+    if (!x) return;
+    formularBlatt("Bearbeiten", `
+      <textarea class="f-text" rows="2">${schuetzen(x.text)}</textarea>
+      <select class="f-art"><option value="treffen" ${x.art === "treffen" ? "selected" : ""}>Beim nächsten Treffen</option><option value="todo" ${x.art === "todo" ? "selected" : ""}>To-do</option></select>
+      <div class="f-datum-box" style="display:${x.art === "todo" ? "block" : "none"}">
+        <div class="meta" style="margin-bottom:4px">Fällig am (optional)</div>
+        <input class="f-datum" type="date" value="${x.faellig || ""}">
+      </div>
+      <button class="knopf zweit f-loeschen" type="button" style="width:100%;color:var(--rot);margin-bottom:10px"><i class="ti ti-trash"></i> Löschen</button>`, {
+      beiStart: el => {
+        el.querySelector(".f-art").addEventListener("change", e => { el.querySelector(".f-datum-box").style.display = e.target.value === "todo" ? "block" : "none"; });
+        el.querySelector(".f-loeschen").onclick = async () => {
+          el.closest(".blatt-hg")?.remove();
+          if (!await frage("Diesen Eintrag löschen?", { ja: "Löschen", gefahr: true })) return;
+          if (await tun(db.from("liste").delete().eq("id", id))) seiteAktualisieren();
+        };
+      },
+      absenden: async el => {
+        const text = wert(el, ".f-text"), art = wert(el, ".f-art");
+        if (!text) { toast("Bitte einen Text eintragen", "fehler"); return false; }
+        if (!await tun(db.from("liste").update({ text, art, faellig: art === "todo" ? (wert(el, ".f-datum") || null) : null }).eq("id", id))) return false;
+        seiteAktualisieren();
+        return true;
+      }
+    });
   },
   async fertig(id, kreis) {
     kreis?.classList.add("an");
@@ -430,54 +482,61 @@ B.watch = {
   _daten: { eintraege: [], bewertungen: [] },
   ansicht: "laeuft",
 
+  _suche: "",
   zeichnen(el) {
-    const { eintraege = [], bewertungen = [] } = this._daten;
+    const { eintraege = [] } = this._daten;
     const zahl = s => eintraege.filter(e => e.status === s).length;
-    const sichtbar = eintraege.filter(e => e.status === this.ansicht);
-    const leerText = { laeuft: ["Gerade schaut ihr nichts – fangt was aus „Geplant“ an.", "player-play"], geplant: ["Noch nichts auf der Liste", "list"], gesehen: ["Noch nichts fertig geschaut", "check"] };
-
-    const karte = e => {
-      const eigene = bewertungen.filter(b => b.eintrag_id === e.id);
-      const sterne = bewertungZeile(bewertungen, e.id);
-      let fortschritt = "";
-      if (e.art === "serie" && e.status !== "geplant") {
-        fortschritt = `<button class="abzeichen" style="border:none;margin-top:8px;font-size:14px;padding:6px 10px" onclick="B.watch.fortschritt(${e.id})">
-          Staffel ${e.staffel} · ${e.folge ? "Folge " + e.folge + " gesehen" : "noch keine Folge"} <i class="ti ti-pencil" style="font-size:13px"></i></button>`;
-      }
-      let knoepfe = "";
-      if (e.status === "geplant") knoepfe = `<button class="knopf" onclick="B.watch.status(${e.id}, 'laeuft')"><i class="ti ti-player-play"></i> Anfangen</button>`;
-      else if (e.status === "laeuft" && e.art === "serie") knoepfe = `
-        <button class="knopf" onclick="B.watch.folge(${e.id})"><i class="ti ti-plus"></i> Folge</button>
-        <button class="knopf zweit" onclick="B.watch.staffel(${e.id})"><i class="ti ti-checks"></i> Staffel</button>
-        <button class="icon-knopf rund" onclick="B.watch.fertig(${e.id})" aria-label="Serie fertig"><i class="ti ti-flag-check"></i></button>`;
-      else if (e.status === "laeuft") knoepfe = `<button class="knopf" onclick="B.watch.fertig(${e.id})"><i class="ti ti-check"></i> Gesehen</button>`;
-      else knoepfe = `<button class="knopf zweit" onclick="B.watch.status(${e.id}, 'laeuft')"><i class="ti ti-repeat"></i> Nochmal schauen</button>`;
-      if (e.status !== "geplant") knoepfe += `<button class="icon-knopf rund" onclick="B.watch.bewerten(${e.id})" aria-label="Bewerten"><i class="ti ti-star"></i></button>`;
-      knoepfe += `<button class="icon-knopf" onclick="B.watch.loeschen(${e.id})" aria-label="Löschen"><i class="ti ti-trash"></i></button>`;
-
-      const liste = eigene.slice().sort((a, b) => new Date(b.erstellt_um) - new Date(a.erstellt_um)).map(b => {
-        const wo = b.staffel ? (b.folge ? `S${b.staffel} · F${b.folge}` : `Staffel ${b.staffel}`) : (e.art === "film" ? "Film" : "Gesamt");
-        return `<div class="kommentar"><span class="meta">${wo}</span> · <b>${schuetzen(nameVon(b.user_id))}</b> <span class="sterne">${sterneText(b.sterne)}</span>${b.kommentar ? "<br>" + schuetzen(b.kommentar) : ""}</div>`;
-      }).join("");
-
-      return `<div class="karte" id="watch-${e.id}">
-        <div class="reihe" style="align-items:flex-start">
-          <i class="ti ti-${e.art === "film" ? "movie" : "device-tv"}" style="font-size:22px;color:var(--text2);margin-top:2px"></i>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:17px">${schuetzen(e.titel)}</div>
-            <div class="meta">${e.plattform ? schuetzen(e.plattform) + " · " : ""}von ${schuetzen(nameVon(e.user_id))}${sterne ? " · " + sterne : ""}</div>
-          </div>
-        </div>
-        ${fortschritt}
-        <div class="reihe" style="margin-top:12px">${knoepfe}</div>
-        ${liste ? `<details style="margin-top:10px"><summary>Bewertungen (${eigene.length}) <i class="ti ti-chevron-down"></i></summary>${liste}</details>` : ""}
-      </div>`;
-    };
-
     setzeHtml(el, `
       ${segmentHtml([["laeuft", `Gerade (${zahl("laeuft")})`], ["geplant", `Geplant (${zahl("geplant")})`], ["gesehen", `Gesehen (${zahl("gesehen")})`]], this.ansicht, "B.watch.wechsel")}
       ${this.ansicht === "geplant" ? `<div class="reihe" style="margin-bottom:14px">${wuerfelKnopf("B.watch.wuerfeln()")}<button class="knopf zweit" onclick="B.watch.neu()"><i class="ti ti-plus"></i> Eintragen</button></div>` : mehrKnopf("B.watch.neu()", "Film oder Serie eintragen")}
-      ${sichtbar.map(karte).join("") || leer(...leerText[this.ansicht])}`);
+      ${eintraege.length >= SUCHE_AB || this._suche ? sucheHtml("watchSuche", "Film oder Serie suchen …", this._suche, "B.watch.suchen") : ""}
+      <div id="watchListe">${this.listeHtml()}</div>`);
+  },
+  suchen(q) { this._suche = q; const l = document.getElementById("watchListe"); if (l) l.innerHTML = this.listeHtml(); },
+  listeHtml() {
+    const { eintraege = [] } = this._daten;
+    const q = this._suche.trim().toLowerCase();
+    if (q) return eintraege.filter(e => passt(q, e.titel, e.plattform)).map(e => this.karteHtml(e, true)).join("") || nichtsGefunden(this._suche.trim());
+    const leerText = { laeuft: ["Gerade schaut ihr nichts – fangt was aus „Geplant“ an.", "player-play"], geplant: ["Noch nichts auf der Liste", "list"], gesehen: ["Noch nichts fertig geschaut", "check"] };
+    return eintraege.filter(e => e.status === this.ansicht).map(e => this.karteHtml(e)).join("") || leer(...leerText[this.ansicht]);
+  },
+  karteHtml(e, suche = false) {
+    const { bewertungen = [] } = this._daten;
+    const eigene = bewertungen.filter(b => b.eintrag_id === e.id);
+    const sterne = bewertungZeile(bewertungen, e.id);
+    let fortschritt = "";
+    if (e.art === "serie" && e.status !== "geplant") {
+      fortschritt = `<button class="abzeichen" style="border:none;margin-top:8px;font-size:14px;padding:6px 10px" onclick="B.watch.fortschritt(${e.id})">
+        Staffel ${e.staffel} · ${e.folge ? "Folge " + e.folge + " gesehen" : "noch keine Folge"} <i class="ti ti-pencil" style="font-size:13px"></i></button>`;
+    }
+    let knoepfe = "";
+    if (e.status === "geplant") knoepfe = `<button class="knopf" onclick="B.watch.status(${e.id}, 'laeuft')"><i class="ti ti-player-play"></i> Anfangen</button>`;
+    else if (e.status === "laeuft" && e.art === "serie") knoepfe = `
+      <button class="knopf" onclick="B.watch.folge(${e.id})"><i class="ti ti-plus"></i> Folge</button>
+      <button class="knopf zweit" onclick="B.watch.staffel(${e.id})"><i class="ti ti-checks"></i> Staffel</button>
+      <button class="icon-knopf rund" onclick="B.watch.fertig(${e.id})" aria-label="Serie fertig"><i class="ti ti-flag-check"></i></button>`;
+    else if (e.status === "laeuft") knoepfe = `<button class="knopf" onclick="B.watch.fertig(${e.id})"><i class="ti ti-check"></i> Gesehen</button>`;
+    else knoepfe = `<button class="knopf zweit" onclick="B.watch.status(${e.id}, 'laeuft')"><i class="ti ti-repeat"></i> Nochmal schauen</button>`;
+    if (e.status !== "geplant") knoepfe += `<button class="icon-knopf rund" onclick="B.watch.bewerten(${e.id})" aria-label="Bewerten"><i class="ti ti-star"></i></button>`;
+    knoepfe += `<button class="icon-knopf rund" onclick="B.watch.mehr(${e.id})" aria-label="Mehr"><i class="ti ti-dots"></i></button>`;
+
+    const liste = eigene.slice().sort((a, b) => new Date(b.erstellt_um) - new Date(a.erstellt_um)).map(b => {
+      const wo = b.staffel ? (b.folge ? `S${b.staffel} · F${b.folge}` : `Staffel ${b.staffel}`) : (e.art === "film" ? "Film" : "Gesamt");
+      return `<div class="kommentar"><span class="meta">${wo}</span> · <b>${schuetzen(nameVon(b.user_id))}</b> <span class="sterne">${sterneText(b.sterne)}</span>${b.kommentar ? "<br>" + schuetzen(b.kommentar) : ""}</div>`;
+    }).join("");
+
+    return `<div class="karte" id="watch-${e.id}">
+      <div class="reihe" style="align-items:flex-start">
+        <i class="ti ti-${e.art === "film" ? "movie" : "device-tv"}" style="font-size:22px;color:var(--text2);margin-top:2px"></i>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:17px">${schuetzen(e.titel)}</div>
+          <div class="meta">${suche ? { laeuft: "Gerade", geplant: "Geplant", gesehen: "Gesehen" }[e.status] + " · " : ""}${e.plattform ? schuetzen(e.plattform) + " · " : ""}von ${schuetzen(nameVon(e.user_id))}${sterne ? " · " + sterne : ""}</div>
+        </div>
+      </div>
+      ${fortschritt}
+      <div class="reihe" style="margin-top:12px">${knoepfe}</div>
+      ${liste ? `<details style="margin-top:10px"><summary>Bewertungen (${eigene.length}) <i class="ti ti-chevron-down"></i></summary>${liste}</details>` : ""}
+    </div>`;
   },
 
   wechsel(s) { this.ansicht = s; this.zeichnen(document.getElementById("seite-watchlist")); },
@@ -486,47 +545,70 @@ B.watch = {
   _filter: "alle",
   _letzte: null,
   wuerfeln() {
-    const FILTER = [["alle", "Alles"], ["film", "Filme"], ["serie", "Serien"]];
-    const geplant = this._daten.eintraege.filter(e => e.status === "geplant");
-    if (!geplant.length) return toast("Bei „Geplant“ steht noch nichts.", "fehler");
-    const b = blatt(`<h3>Was schauen wir heute?</h3><div class="chips w-quellen"></div><div class="w-inhalt"></div>`);
-    let runde = 0;
-    const zeigen = async () => {
-      const passend = f => geplant.filter(e => f === "alle" || e.art === f);
-      b.el.querySelector(".w-quellen").innerHTML = FILTER.map(([k, n]) =>
-        `<button class="chip ${k === this._filter ? "aktiv" : ""}" data-q="${k}">${n} (${passend(k).length})</button>`).join("");
-      const inhalt = b.el.querySelector(".w-inhalt");
-      const liste = passend(this._filter);
-      if (!liste.length) {
-        inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">Bei „Geplant“ ${this._filter === "film" ? "steht gerade kein Film" : "steht gerade keine Serie"}.</div>`;
-        return;
-      }
-      const wahl = wuerfelZiehen(liste, liste.find(e => e.id === this._letzte));
-      this._letzte = wahl.id;
-      const meine = ++runde;
-      inhalt.innerHTML = wuerfelFeld("Heute schauen wir …");
-      if (!await wuerfelDrehen(inhalt, liste.map(e => e.titel), wahl.titel, () => meine === runde && b.hg.isConnected)) return;
-      inhalt.querySelector(".w-mehr").innerHTML = `
-        <div class="meta">${wahl.art === "film" ? "Film" : "Serie"}${wahl.plattform ? " · " + schuetzen(wahl.plattform) : ""} · von ${schuetzen(nameVon(wahl.user_id))}</div>
-        ${wuerfelKnoepfe('<i class="ti ti-player-play"></i> Anfangen')}`;
-      inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
-      inhalt.querySelector('[data-a="ok"]').onclick = async () => {
-        b.zu();
-        await this.status(wahl.id, "laeuft");
-        toast("Viel Spaß beim Schauen!");
-      };
+  const FILTER = [["alle", "Alles"], ["film", "Filme"], ["serie", "Serien"]];
+  const geplant = this._daten.eintraege.filter(e => e.status === "geplant");
+  if (!geplant.length) return toast("Bei „Geplant“ steht noch nichts.", "fehler");
+  const b = blatt(`<h3>Was schauen wir heute?</h3><div class="chips w-quellen"></div><div class="w-inhalt"></div>`);
+  let runde = 0;
+  const zeigen = async () => {
+    const passend = f => geplant.filter(e => f === "alle" || e.art === f);
+    b.el.querySelector(".w-quellen").innerHTML = FILTER.map(([k, n]) =>
+      `<button class="chip ${k === this._filter ? "aktiv" : ""}" data-q="${k}">${n} (${passend(k).length})</button>`).join("");
+    const inhalt = b.el.querySelector(".w-inhalt");
+    const liste = passend(this._filter);
+    if (!liste.length) {
+      inhalt.innerHTML = `<div class="meta" style="text-align:center;padding:24px 0">Bei „Geplant“ ${this._filter === "film" ? "steht gerade kein Film" : "steht gerade keine Serie"}.</div>`;
+      return;
+    }
+    const wahl = wuerfelZiehen(liste, liste.find(e => e.id === this._letzte));
+    this._letzte = wahl.id;
+    const meine = ++runde;
+    inhalt.innerHTML = wuerfelFeld("Heute schauen wir …");
+    if (!await wuerfelDrehen(inhalt, liste.map(e => e.titel), wahl.titel, () => meine === runde && b.hg.isConnected)) return;
+    inhalt.querySelector(".w-mehr").innerHTML = `
+      <div class="meta">${wahl.art === "film" ? "Film" : "Serie"}${wahl.plattform ? " · " + schuetzen(wahl.plattform) : ""} · von ${schuetzen(nameVon(wahl.user_id))}</div>
+      ${wuerfelKnoepfe('<i class="ti ti-player-play"></i> Anfangen')}`;
+    inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
+    inhalt.querySelector('[data-a="ok"]').onclick = async () => {
+      b.zu();
+      await this.status(wahl.id, "laeuft");
+      toast("Viel Spaß beim Schauen!");
     };
-    b.el.querySelector(".w-quellen").addEventListener("click", e => {
-      const k = e.target.closest("[data-q]");
-      if (!k || k.dataset.q === this._filter) return;
-      this._filter = k.dataset.q;
-      this._letzte = null;
-      zeigen();
-    });
+  };
+  b.el.querySelector(".w-quellen").addEventListener("click", e => {
+    const k = e.target.closest("[data-q]");
+    if (!k || k.dataset.q === this._filter) return;
+    this._filter = k.dataset.q;
+    this._letzte = null;
     zeigen();
+  });
+  zeigen();
   },
 
   finden(id) { return this._daten.eintraege.find(e => e.id === id); },
+
+  mehr(id) {
+    const e = this.finden(id);
+    if (!e) return;
+    mehrMenue(e.titel, [[() => this.bearbeiten(id), "pencil", "Bearbeiten"], [() => this.loeschen(id), "trash", "Löschen", true]]);
+  },
+
+  bearbeiten(id) {
+    const e = this.finden(id);
+    formularBlatt("Bearbeiten", `
+      <select class="f-art"><option value="serie" ${e.art === "serie" ? "selected" : ""}>Serie</option><option value="film" ${e.art === "film" ? "selected" : ""}>Film</option></select>
+      <input class="f-titel" placeholder="Titel" value="${schuetzen(e.titel)}">
+      <input class="f-wo" list="wlPlattformen2" placeholder="Wo? z. B. Netflix (optional)" value="${schuetzen(e.plattform || "")}">
+      <datalist id="wlPlattformen2">${PLATTFORMEN.map(p => `<option value="${p}">`).join("")}</datalist>`, {
+      absenden: async el => {
+        const titel = wert(el, ".f-titel");
+        if (!titel) { toast("Bitte einen Titel eintragen", "fehler"); return false; }
+        if (!await tun(db.from("watchlist").update({ titel, art: wert(el, ".f-art"), plattform: wert(el, ".f-wo") || null }).eq("id", id))) return false;
+        seiteAktualisieren();
+        return true;
+      }
+    });
+  },
 
   neu() {
     formularBlatt("Film oder Serie", `
@@ -646,32 +728,9 @@ B.orte = {
     return w.length ? w.reduce((a, c) => a + c, 0) / w.length : 0;
   },
 
+  _suche: "",
   zeichnen(el) {
-    const { orte, bewertungen, fotos } = this._daten;
-    const sichtbar = orte.filter(o => o.stadt === this.stadt && o.art === this.art);
-    const geplant = sichtbar.filter(o => !o.besucht);
-    const besucht = sichtbar.filter(o => o.besucht).sort((a, b) => this.wertung(b) - this.wertung(a));
-    const [plural] = ORT_ARTEN[this.art];
-
-    const karte = o => {
-      const bilder = fotos.filter(f => f.ort_id === o.id);
-      const eigene = bewertungen.filter(b => b.ort_id === o.id).sort((a, b) => new Date(b.erstellt_um) - new Date(a.erstellt_um));
-      const sterne = bewertungZeile(bewertungen, o.id, "ort_id");
-      return `<div class="karte" id="ort-${o.id}">
-        <div style="font-weight:700;font-size:17px">${schuetzen(o.name)}</div>
-        <div class="meta">${o.kueche ? schuetzen(o.kueche) + " · " : ""}${(ORT_ARTEN[o.art] || ORT_ARTEN.restaurant)[1]}${o.art === "snack" && GESCHMACK[o.geschmack] ? " · " + GESCHMACK[o.geschmack] : ""}${sterne ? " · " + sterne : ""}</div>
-        <a class="meta" style="display:inline-flex;gap:4px;align-items:center;color:var(--blau-text)" href="${this.karten(o)}" target="_blank" rel="noopener"><i class="ti ti-map-pin"></i>${o.adresse ? schuetzen(o.adresse) : "In Karten öffnen"}</a>
-        ${bilder.length ? `<div class="raster" style="margin-top:10px">${bilder.map(f => bildTag(f.datei_pfad)).join("")}</div>` : ""}
-        <div class="reihe" style="margin-top:12px">
-          <button class="knopf" onclick="B.orte.bewerten(${o.id})"><i class="ti ti-star"></i> Bewerten</button>
-          ${o.besucht ? "" : `<button class="knopf zweit" onclick="B.orte.besucht(${o.id})"><i class="ti ti-check"></i> Waren da</button>`}
-          <button class="icon-knopf rund" onclick="B.orte.mehr(${o.id})" aria-label="Mehr"><i class="ti ti-dots"></i></button>
-        </div>
-        ${eigene.length ? `<details style="margin-top:10px"><summary>Bewertungen (${eigene.length}) <i class="ti ti-chevron-down"></i></summary>${eigene.map(b =>
-          `<div class="kommentar"><b>${schuetzen(nameVon(b.user_id))}</b> <span class="sterne">${sterneText(b.sterne)}</span> <span class="meta">${datumKurz(b.erstellt_um)}</span>${b.kommentar ? "<br>" + schuetzen(b.kommentar) : ""}</div>`).join("")}</details>` : ""}
-      </div>`;
-    };
-
+    const { orte } = this._daten;
     setzeHtml(el, `
       <div class="chips">${this.staedte().map(s => `<button class="chip ${s === this.stadt ? "aktiv" : ""}" data-stadt="${schuetzen(s)}" onclick="B.orte.stadtWahl(this.dataset.stadt)">${schuetzen(s)}</button>`).join("")}
         <button class="chip" onclick="B.orte.neueStadt()"><i class="ti ti-plus"></i> Stadt</button></div>
@@ -681,9 +740,43 @@ B.orte = {
         ${wuerfelKnopf("B.orte.zufall()")}
         <button class="knopf zweit" onclick="B.orte.neu()"><i class="ti ti-plus"></i> Neuer Ort</button>
       </div>
-      ${geplant.length ? `<div class="abschnitt">Wollen wir hin</div>${geplant.map(karte).join("")}` : ""}
-      ${besucht.length ? `<div class="abschnitt">Waren wir – beste zuerst</div>${besucht.map(karte).join("")}` : ""}
-      ${sichtbar.length ? "" : leer(`Noch keine ${plural} in ${schuetzen(this.stadt)}`, ORT_ARTEN[this.art][2])}`);
+      ${orte.length >= SUCHE_AB || this._suche ? sucheHtml("orteSuche", "Alle Orte durchsuchen …", this._suche, "B.orte.suchen") : ""}
+      <div id="orteListe">${this.listeHtml()}</div>`);
+  },
+  suchen(q) { this._suche = q; const l = document.getElementById("orteListe"); if (l) l.innerHTML = this.listeHtml(); },
+  listeHtml() {
+    const { orte } = this._daten;
+    const q = this._suche.trim().toLowerCase();
+    if (q) {
+      const treffer = orte.filter(o => passt(q, o.name, o.kueche, o.adresse, o.stadt, (ORT_ARTEN[o.art] || [])[1], GESCHMACK[o.geschmack]))
+        .sort((a, b) => a.name.localeCompare(b.name, "de"));
+      return treffer.map(o => this.karteHtml(o, true)).join("") || nichtsGefunden(this._suche.trim());
+    }
+    const sichtbar = orte.filter(o => o.stadt === this.stadt && o.art === this.art);
+    const geplant = sichtbar.filter(o => !o.besucht);
+    const besucht = sichtbar.filter(o => o.besucht).sort((a, b) => this.wertung(b) - this.wertung(a));
+    return `${geplant.length ? `<div class="abschnitt">Wollen wir hin</div>${geplant.map(o => this.karteHtml(o)).join("")}` : ""}
+      ${besucht.length ? `<div class="abschnitt">Waren wir – beste zuerst</div>${besucht.map(o => this.karteHtml(o)).join("")}` : ""}
+      ${sichtbar.length ? "" : leer(`Noch keine ${ORT_ARTEN[this.art][0]} in ${schuetzen(this.stadt)}`, ORT_ARTEN[this.art][2])}`;
+  },
+  karteHtml(o, suche = false) {
+    const { bewertungen, fotos } = this._daten;
+    const bilder = fotos.filter(f => f.ort_id === o.id);
+    const eigene = bewertungen.filter(b => b.ort_id === o.id).sort((a, b) => new Date(b.erstellt_um) - new Date(a.erstellt_um));
+    const sterne = bewertungZeile(bewertungen, o.id, "ort_id");
+    return `<div class="karte" id="ort-${o.id}">
+      <div style="font-weight:700;font-size:17px">${schuetzen(o.name)}</div>
+      <div class="meta">${suche ? schuetzen(o.stadt) + " · " : ""}${o.kueche ? schuetzen(o.kueche) + " · " : ""}${(ORT_ARTEN[o.art] || ORT_ARTEN.restaurant)[1]}${o.art === "snack" && GESCHMACK[o.geschmack] ? " · " + GESCHMACK[o.geschmack] : ""}${sterne ? " · " + sterne : ""}</div>
+      <a class="meta" style="display:inline-flex;gap:4px;align-items:center;color:var(--blau-text)" href="${this.karten(o)}" target="_blank" rel="noopener"><i class="ti ti-map-pin"></i>${o.adresse ? schuetzen(o.adresse) : "In Karten öffnen"}</a>
+      ${bilder.length ? `<div class="raster" style="margin-top:10px">${bilder.map(f => bildTag(f.datei_pfad)).join("")}</div>` : ""}
+      <div class="reihe" style="margin-top:12px">
+        <button class="knopf" onclick="B.orte.bewerten(${o.id})"><i class="ti ti-star"></i> Bewerten</button>
+        ${o.besucht ? "" : `<button class="knopf zweit" onclick="B.orte.besucht(${o.id})"><i class="ti ti-check"></i> Waren da</button>`}
+        <button class="icon-knopf rund" onclick="B.orte.mehr(${o.id})" aria-label="Mehr"><i class="ti ti-dots"></i></button>
+      </div>
+      ${eigene.length ? `<details style="margin-top:10px"><summary>Bewertungen (${eigene.length}) <i class="ti ti-chevron-down"></i></summary>${eigene.map(b =>
+        `<div class="kommentar"><b>${schuetzen(nameVon(b.user_id))}</b> <span class="sterne">${sterneText(b.sterne)}</span> <span class="meta">${datumKurz(b.erstellt_um)}</span>${b.kommentar ? "<br>" + schuetzen(b.kommentar) : ""}</div>`).join("")}</details>` : ""}
+    </div>`;
   },
 
   neuZeichnen() { this.zeichnen(document.getElementById("seite-orte")); },
@@ -691,23 +784,25 @@ B.orte = {
   artWahl(a) { this.art = a; this.neuZeichnen(); },
 
   async neueStadt() {
-    const s = await eingabe("Neue Stadt", { platzhalter: "z. B. Lissabon", hinweis: "Praktisch für Urlaube: Restaurants, Snacks, Cafés und Bars vorab sammeln.", ok: "Hinzufügen" });
-    if (!s) return;
-    if (!this.staedte().includes(s)) this.extra.push(s);
-    this.stadtWahl(s);
+  const s = await eingabe("Neue Stadt", { platzhalter: "z. B. Lissabon", hinweis: "Praktisch für Urlaube: Restaurants, Snacks, Cafés und Bars vorab sammeln.", ok: "Hinzufügen" });
+  if (!s) return;
+  if (!this.staedte().includes(s)) this.extra.push(s);
+  this.stadtWahl(s);
   },
 
-  neu() {
-    formularBlatt("Neuer Ort", `
-      <input class="f-name" placeholder="Name">
-      <select class="f-art">${Object.entries(ORT_ARTEN).map(([k, [, e]]) => `<option value="${k}" ${k === this.art ? "selected" : ""}>${e}</option>`).join("")}</select>
-      <input class="f-stadt" list="orteStaedte" placeholder="Stadt" value="${schuetzen(this.stadt)}">
+  formular(o = null) {
+    const art = o ? o.art : this.art;
+    formularBlatt(o ? "Ort bearbeiten" : "Neuer Ort", `
+      <input class="f-name" placeholder="Name" value="${schuetzen(o?.name || "")}">
+      <select class="f-art">${Object.entries(ORT_ARTEN).map(([k, [, e]]) => `<option value="${k}" ${k === art ? "selected" : ""}>${e}</option>`).join("")}</select>
+      <select class="f-geschmack" style="display:${art === "snack" ? "block" : "none"}">${Object.entries(GESCHMACK).map(([k, n]) => `<option value="${k}" ${k === o?.geschmack ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <input class="f-stadt" list="orteStaedte" placeholder="Stadt" value="${schuetzen(o?.stadt || this.stadt)}">
       <datalist id="orteStaedte">${this.staedte().map(s => `<option value="${schuetzen(s)}">`).join("")}</datalist>
-      <select class="f-geschmack" style="display:${this.art === "snack" ? "block" : "none"}">${Object.entries(GESCHMACK).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")}</select>
-      <input class="f-kueche" list="orteKuechen" placeholder="Küche, z. B. Italienisch (optional)">
+      <input class="f-kueche" list="orteKuechen" placeholder="Küche, z. B. Italienisch (optional)" value="${schuetzen(o?.kueche || "")}">
       <datalist id="orteKuechen">${KUECHEN.map(k => `<option value="${k}">`).join("")}</datalist>
-      <input class="f-adresse" placeholder="Adresse (optional)">
-      <select class="f-besucht"><option value="nein">Wollen wir hin</option><option value="ja">Waren wir schon</option></select>`, {
+      <input class="f-adresse" placeholder="Adresse (optional)" value="${schuetzen(o?.adresse || "")}">
+      <select class="f-besucht"><option value="nein">Wollen wir hin</option><option value="ja" ${o?.besucht ? "selected" : ""}>Waren wir schon</option></select>`, {
+      ok: o ? "Speichern" : "Hinzufügen",
       beiStart: el => {
         el.querySelector(".f-art").addEventListener("change", e => { el.querySelector(".f-geschmack").style.display = e.target.value === "snack" ? "block" : "none"; });
       },
@@ -716,7 +811,7 @@ B.orte = {
         if (!name || !stadt) { toast("Bitte Name und Stadt eintragen", "fehler"); return false; }
         const zeile = { name, stadt, art, kueche: wert(el, ".f-kueche") || null, adresse: wert(el, ".f-adresse") || null, besucht: wert(el, ".f-besucht") === "ja" };
         if (art === "snack") zeile.geschmack = wert(el, ".f-geschmack");
-        const ok = await tun(db.from("orte").insert(zeile));
+        const ok = await tun(o ? db.from("orte").update(zeile).eq("id", o.id) : db.from("orte").insert(zeile));
         if (!ok) return false;
         this.stadt = stadt; this.art = art; speicher.schreiben("orteStadt", stadt);
         seiteAktualisieren();
@@ -724,6 +819,7 @@ B.orte = {
       }
     });
   },
+  neu() { this.formular(); },
 
   finden(id) { return this._daten.orte.find(o => o.id === id); },
 
@@ -753,43 +849,11 @@ B.orte = {
   mehr(id) {
     const o = this.finden(id);
     if (!o) return;
-    const zeile = (a, icon, text, rot = false) => `<div class="zeile" data-a="${a}"><i class="ti ti-${icon}" style="font-size:22px;color:${rot ? "var(--rot)" : "var(--blau-text)"}"></i><div class="inhalt"><div class="haupt" style="${rot ? "color:var(--rot)" : ""}">${text}</div></div></div>`;
-    const b = blatt(`
-      <h3>${schuetzen(o.name)}</h3>
-      <div class="auswahl-liste">
-        ${zeile("fotos", "camera-plus", "Fotos hinzufügen")}
-        ${zeile("art", "category", "Kategorie ändern")}
-        ${zeile("loeschen", "trash", "Löschen", true)}
-      </div>`);
-    b.el.addEventListener("click", e => {
-      const k = e.target.closest("[data-a]");
-      if (!k) return;
-      b.zu();
-      if (k.dataset.a === "fotos") this.fotos(id);
-      else if (k.dataset.a === "art") this.artAendern(id);
-      else this.loeschen(id);
-    });
-  },
-
-  artAendern(id) {
-    const o = this.finden(id);
-    formularBlatt("Kategorie ändern", `
-      <select class="f-art">${Object.entries(ORT_ARTEN).map(([k, [, e]]) => `<option value="${k}" ${k === o.art ? "selected" : ""}>${e}</option>`).join("")}</select>
-      <select class="f-geschmack" style="display:${o.art === "snack" ? "block" : "none"}">${Object.entries(GESCHMACK).map(([k, n]) => `<option value="${k}" ${k === o.geschmack ? "selected" : ""}>${n}</option>`).join("")}</select>`, {
-      ok: "Speichern",
-      beiStart: el => {
-        el.querySelector(".f-art").addEventListener("change", e => { el.querySelector(".f-geschmack").style.display = e.target.value === "snack" ? "block" : "none"; });
-      },
-      absenden: async el => {
-        const art = wert(el, ".f-art");
-        const neu = { art };
-        if (art === "snack") neu.geschmack = wert(el, ".f-geschmack");
-        if (!await tun(db.from("orte").update(neu).eq("id", id))) return false;
-        this.art = art;
-        seiteAktualisieren();
-        return true;
-      }
-    });
+    mehrMenue(o.name, [
+      [() => this.formular(o), "pencil", "Bearbeiten"],
+      [() => this.fotos(id), "camera-plus", "Fotos hinzufügen"],
+      [() => this.loeschen(id), "trash", "Löschen", true]
+    ]);
   },
 
   async loeschen(id) {
@@ -898,25 +962,36 @@ B.koch = {
   _daten: [],
   ansicht: "offen",
   _einkauf: [],
+  _suche: "",
   zeichnen(el) {
     const segment = segmentHtml([
       ["offen", `Rezepte (${this._daten.filter(r => !r.gekocht).length})`],
       ["gekocht", `Gekocht (${this._daten.filter(r => r.gekocht).length})`],
       ["einkauf", `Einkauf (${this._einkauf.filter(e => !e.erledigt).length})`]], this.ansicht, "B.koch.wechsel");
     if (this.ansicht === "einkauf") return this.zeichneEinkauf(el, segment);
-    const gekocht = this.ansicht === "gekocht";
-    const liste = this._daten.filter(r => !!r.gekocht === gekocht);
     setzeHtml(el, `
       ${segment}
       <div class="reihe" style="margin-bottom:14px">
         ${wuerfelKnopf("B.koch.wuerfeln()")}
         <button class="knopf zweit" onclick="B.koch.neu()"><i class="ti ti-plus"></i> Neues Gericht</button>
       </div>
-      ${liste.map(r => `<div class="karte" id="rezept-${r.id}" style="padding:0;overflow:hidden">
+      ${this._daten.length >= SUCHE_AB || this._suche ? sucheHtml("kochSuche", "Rezept oder Zutat suchen …", this._suche, "B.koch.suchen") : ""}
+      <div id="kochListe">${this.listeHtml()}</div>`);
+  },
+  suchen(q) { this._suche = q; const l = document.getElementById("kochListe"); if (l) l.innerHTML = this.listeHtml(); },
+  listeHtml() {
+    const q = this._suche.trim().toLowerCase();
+    if (q) return this._daten.filter(r => passt(q, r.titel, r.rezept)).map(r => this.karteHtml(r, true)).join("") || nichtsGefunden(this._suche.trim());
+    const gekocht = this.ansicht === "gekocht";
+    return this._daten.filter(r => !!r.gekocht === gekocht).map(r => this.karteHtml(r)).join("")
+      || leer(gekocht ? "Noch nichts gekocht" : "Noch keine Gerichte eingetragen", "chef-hat");
+  },
+  karteHtml(r, suche = false) {
+    return `<div class="karte" id="rezept-${r.id}" style="padding:0;overflow:hidden">
         ${r.bild_pfad ? bildTag(r.bild_pfad, 'style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block"') : ""}
         <div style="padding:14px 16px 16px">
           <div style="font-weight:700;font-size:18px">${schuetzen(r.titel)}</div>
-          <div class="meta">von ${schuetzen(nameVon(r.user_id))} · ${datumKurz(r.erstellt_um)}</div>
+          <div class="meta">${suche ? (r.gekocht ? "Gekocht · " : "Rezepte · ") : ""}von ${schuetzen(nameVon(r.user_id))} · ${datumKurz(r.erstellt_um)}</div>
           ${r.rezept ? `<details style="margin-top:6px"><summary>Rezept anzeigen <i class="ti ti-chevron-down"></i></summary><div class="kommentar" style="white-space:pre-wrap;margin-top:8px">${schuetzen(r.rezept)}</div></details>` : ""}
           ${r.link && /^https?:\/\//i.test(r.link) ? `<a class="meta" style="display:inline-flex;gap:4px;align-items:center;color:var(--blau-text)" href="${schuetzen(r.link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Zum Rezept</a>` : ""}
           <div class="reihe" style="margin-top:12px">
@@ -925,7 +1000,7 @@ B.koch = {
             <button class="icon-knopf rund" onclick="B.koch.mehr(${r.id})" aria-label="Mehr"><i class="ti ti-dots"></i></button>
           </div>
         </div>
-      </div>`).join("") || leer(gekocht ? "Noch nichts gekocht" : "Noch keine Gerichte eingetragen", "chef-hat")}`);
+      </div>`;
   },
   wechsel(a) { this.ansicht = a; this.zeichnen(document.getElementById("seite-kochbuch")); },
 
@@ -1128,21 +1203,27 @@ B.koch = {
   mehr(id) {
     const r = this._daten.find(x => x.id === id);
     if (!r) return;
-    const zeile = (a, icon, text, farbe = "var(--blau-text)") => `<div class="zeile" data-a="${a}"><i class="ti ti-${icon}" style="font-size:22px;color:${farbe}"></i><div class="inhalt"><div class="haupt" style="${a === "loeschen" ? "color:var(--rot)" : ""}">${text}</div></div></div>`;
-    const b = blatt(`
-      <h3>${schuetzen(r.titel)}</h3>
-      <div class="auswahl-liste">
-        ${zeile("bild", "camera-plus", r.bild_pfad ? "Bild ändern" : "Bild hinzufügen")}
-        ${r.gekocht ? zeile("zurueck", "arrow-back-up", "Zurück zu Rezepte") : ""}
-        ${zeile("loeschen", "trash", "Löschen", "var(--rot)")}
-      </div>`);
-    b.el.addEventListener("click", e => {
-      const k = e.target.closest("[data-a]");
-      if (!k) return;
-      b.zu();
-      if (k.dataset.a === "bild") this.bild(id);
-      else if (k.dataset.a === "zurueck") this.umschalten(id, true);
-      else this.loeschen(id);
+    mehrMenue(r.titel, [
+      [() => this.bearbeiten(id), "pencil", "Bearbeiten"],
+      [() => this.bild(id), "camera-plus", r.bild_pfad ? "Bild ändern" : "Bild hinzufügen"],
+      ...(r.gekocht ? [[() => this.umschalten(id, true), "arrow-back-up", "Zurück zu Rezepte"]] : []),
+      [() => this.loeschen(id), "trash", "Löschen", true]
+    ]);
+  },
+
+  bearbeiten(id) {
+    const r = this._daten.find(x => x.id === id);
+    formularBlatt("Rezept bearbeiten", `
+      <input class="f-titel" placeholder="Name des Gerichts" value="${schuetzen(r.titel)}">
+      <textarea class="f-rezept" rows="8" placeholder="Zutaten und Zubereitung …">${schuetzen(r.rezept || "")}</textarea>
+      <input class="f-link" placeholder="Link zum Rezept (optional)" inputmode="url" value="${schuetzen(r.link || "")}">`, {
+      absenden: async el => {
+        const titel = wert(el, ".f-titel");
+        if (!titel) { toast("Bitte gib dem Gericht einen Namen", "fehler"); return false; }
+        if (!await tun(db.from("rezepte").update({ titel, rezept: wert(el, ".f-rezept") || null, link: wert(el, ".f-link") || null }).eq("id", id))) return false;
+        seiteAktualisieren();
+        return true;
+      }
     });
   },
 
