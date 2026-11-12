@@ -201,6 +201,24 @@
   .erwaehnung-wahl button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rand); background: var(--karte); color: var(--text);
     border-radius: 20px; padding: 4px 12px 4px 4px; margin: 0; font-size: 14px; font-weight: 600; }
   .erwaehnung-wahl .avatar { width: 26px; height: 26px; font-size: 12px; }
+  .historie { overflow-y: auto; flex: 1; }
+  .k-kopf { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 8px; font-size: 17px; text-transform: capitalize; }
+  .k-raster { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 6px; }
+  .k-wochentage div { text-align: center; font-size: 12px; color: var(--text3); font-weight: 600; padding-bottom: 2px; }
+  .k-tag { height: 40px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--text); }
+  .k-tag span { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+  .k-tag.heute span { box-shadow: inset 0 0 0 2px var(--blau-text); font-weight: 700; }
+  .k-tag.f0, .k-tag.f1 { color: #fff; font-weight: 600; }
+  .k-tag.f0 { background: var(--reise0); } .k-tag.f1 { background: var(--reise1); }
+  .k-tag.start { border-top-left-radius: 20px; border-bottom-left-radius: 20px; }
+  .k-tag.ende { border-top-right-radius: 20px; border-bottom-right-radius: 20px; }
+  .k-tag.heute.f0 span, .k-tag.heute.f1 span { box-shadow: inset 0 0 0 2px #fff; }
+  .k-legende { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 14px; font-size: 13px; color: var(--text2); }
+  .k-legende span { display: inline-flex; align-items: center; gap: 6px; }
+  .k-punkt { display: inline-block; width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+  .k-punkt.f0 { background: var(--reise0); } .k-punkt.f1 { background: var(--reise1); }
+  :root { --reise0: #1f3a68; --reise1: #c2410c; }
+  @media (prefers-color-scheme: dark) { :root { --reise0: #3b6fc4; --reise1: #d9692e; } }
   .essen-detail { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   @keyframes hochgleiten { from { transform: translateY(40px); opacity: .4; } }
   @keyframes einblenden { from { opacity: 0; } }
@@ -767,28 +785,36 @@ function zeigeCountdown() {
     ${besuche.length ? `<div style="margin-top:12px">${besuche.map(b => `
       <div class="zeile">
         <i class="ti ti-train" style="font-size:20px;color:var(--text2)"></i>
-        <div class="inhalt">
+        <div class="inhalt" style="cursor:pointer" onclick="besuchFormular(${b.id})">
           <div class="haupt">${schuetzen(b.reisender)}</div>
           <div class="neben">${new Date(b.ankunft).toLocaleString("de-DE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}${b.abreise ? " – " + datumKurz(b.abreise) : ""}</div>
+          ${b.gleis ? `<div class="neben"><i class="ti ti-map-pin"></i> Ankunft Gleis ${schuetzen(b.gleis)}</div>` : ""}
         </div>
         <button class="icon-knopf" onclick="besuchLoeschen(${b.id})" aria-label="Löschen"><i class="ti ti-trash"></i></button>
       </div>`).join("")}</div>` : ""}
     ${zuletzt ? `<div class="meta" style="margin-top:10px">Zuletzt gefahren: <b>${schuetzen(zuletzt)}</b> (${datumKurz(letzte.ankunft)}) · Als Nächstes dran: <b>${schuetzen(dran)}</b></div>` : ""}
-    <button class="knopf zweit" style="margin-top:12px" onclick="besuchFormular()"><i class="ti ti-plus"></i> Treffen eintragen</button>`;
+    <div class="reihe" style="margin-top:12px">
+      <button class="knopf zweit" onclick="besuchFormular()"><i class="ti ti-plus"></i> Treffen eintragen</button>
+      <button class="knopf zweit" onclick="besuchHistorie()"><i class="ti ti-calendar"></i> Historie</button>
+    </div>`;
 }
 setInterval(() => { if (aktuelleSeite === "heute" && besuchDaten) zeigeCountdown(); }, 60000);
 
-function besuchFormular() {
+function besuchFormular(id = null) {
+  const alt = id ? (besuchDaten?.kommend || []).find(x => x.id === id) : null;
   const zuletzt = besuchDaten?.letzte?.reisender?.split(" ")[0];
-  const vorschlag = REISEN.find(x => zuletzt && !x.startsWith(zuletzt)) || REISEN[0];
+  const vorschlag = alt?.reisender || REISEN.find(x => zuletzt && !x.startsWith(zuletzt)) || REISEN[0];
+  const lokal = iso => { const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
   const b = blatt(`
-    <h3>Treffen eintragen</h3>
+    <h3>${alt ? "Treffen bearbeiten" : "Treffen eintragen"}</h3>
     <div class="meta">Wer fährt, und wann kommt ihr an?</div>
     <select id="bfReise">${REISEN.map(x => `<option ${x === vorschlag ? "selected" : ""}>${x}</option>`).join("")}</select>
     <div class="meta">Ankunft</div>
-    <input id="bfAnkunft" type="datetime-local">
+    <input id="bfAnkunft" type="datetime-local" value="${alt ? lokal(alt.ankunft) : ""}">
+    <div class="meta">Gleis bei Ankunft (optional)</div>
+    <input id="bfGleis" placeholder="z. B. 14 oder 9a" maxlength="10" value="${schuetzen(alt?.gleis || "")}">
     <div class="meta">Abreise (optional)</div>
-    <input id="bfAbreise" type="date">
+    <input id="bfAbreise" type="date" value="${alt?.abreise || ""}">
     <div class="reihe"><button class="knopf zweit" data-a="0">Abbrechen</button><button class="knopf" data-a="1">Speichern</button></div>`);
   b.el.addEventListener("click", async e => {
     const k = e.target.closest("[data-a]");
@@ -796,9 +822,86 @@ function besuchFormular() {
     if (k.dataset.a === "0") return b.zu();
     const ankunft = $("bfAnkunft").value;
     if (!ankunft) return toast("Bitte die Ankunft eintragen", "fehler");
-    const ok = await tun(db.from("besuche").insert({ reisender: $("bfReise").value, ankunft: new Date(ankunft).toISOString(), abreise: $("bfAbreise").value || null }));
+    const daten = { reisender: $("bfReise").value, ankunft: new Date(ankunft).toISOString(), abreise: $("bfAbreise").value || null };
+    const gleis = $("bfGleis").value.trim();
+    if (gleis || alt?.gleis) daten.gleis = gleis || null;
+    const ok = await tun(alt ? db.from("besuche").update(daten).eq("id", alt.id) : db.from("besuche").insert(daten));
     if (ok) { b.zu(); toast("Treffen gespeichert ✓"); ladeBesuch(); }
   });
+}
+
+/* ---------- Historie: Kalender, wer wann zu Besuch war ---------- */
+const reiseFarbe = r => REISEN.findIndex(x => r && (r === x || r.split(" ")[0] === x.split(" ")[0]));
+const tagText = d => d.toLocaleDateString("sv-SE");
+async function besuchHistorie() {
+  const b = blatt(`<div class="historie"><div class="meta" style="padding:30px 0;text-align:center">Lädt …</div></div>`, { klasse: "hoch" });
+  const { data, error } = await db.from("besuche").select("*").order("ankunft");
+  if (error) { b.zu(); return fehler(error); }
+  const besuche = (data || []).map(x => {
+    const von = tagText(new Date(x.ankunft));
+    return { ...x, von, bis: x.abreise && x.abreise >= von ? x.abreise : von, farbe: Math.max(0, reiseFarbe(x.reisender)) };
+  });
+  let monat = new Date(); monat.setDate(1);
+  const zeichnen = () => {
+    const box = b.el.querySelector(".historie");
+    if (!box) return;
+    const j = monat.getFullYear(), m = monat.getMonth();
+    const erster = new Date(j, m, 1), tage = new Date(j, m + 1, 0).getDate();
+    const versatz = (erster.getDay() + 6) % 7;
+    const heute = tagText(new Date());
+    const besuchAm = t => besuche.find(x => x.von <= t && t <= x.bis);
+    let zellen = "";
+    for (let i = 0; i < versatz; i++) zellen += `<div></div>`;
+    for (let d = 1; d <= tage; d++) {
+      const t = tagText(new Date(j, m, d));
+      const x = besuchAm(t);
+      const wt = (versatz + d - 1) % 7;
+      const klassen = ["k-tag"];
+      if (x) {
+        klassen.push("f" + x.farbe);
+        if (t === x.von || wt === 0 || d === 1) klassen.push("start");
+        if (t === x.bis || wt === 6 || d === tage) klassen.push("ende");
+      }
+      if (t === heute) klassen.push("heute");
+      zellen += `<div class="${klassen.join(" ")}"><span>${d}</span></div>`;
+    }
+    const imMonat = besuche.filter(x => x.von <= tagText(new Date(j, m, tage)) && x.bis >= tagText(erster));
+    const tageZwischen = x => Math.round((new Date(x.bis) - new Date(x.von)) / 864e5) + 1;
+    const diesesJahr = besuche.filter(x => x.von.startsWith(String(j)) && x.von <= heute);
+    box.innerHTML = `
+      <h3 style="margin-bottom:4px">Eure Treffen</h3>
+      <div class="meta">${j}: ${diesesJahr.length} Treffen · ${diesesJahr.reduce((s, x) => s + tageZwischen(x), 0)} Tage zusammen</div>
+      <div class="k-kopf">
+        <button class="icon-knopf rund" data-m="-1" aria-label="Voriger Monat"><i class="ti ti-chevron-left"></i></button>
+        <b>${erster.toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</b>
+        <button class="icon-knopf rund" data-m="1" aria-label="Nächster Monat"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      <div class="k-raster k-wochentage">${["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(w => `<div>${w}</div>`).join("")}</div>
+      <div class="k-raster">${zellen}</div>
+      <div class="k-legende">${REISEN.map((r, i) => `<span><i class="k-punkt f${i}"></i>${schuetzen(r)}</span>`).join("")}</div>
+      <div style="margin-top:8px">${imMonat.map(x => `
+        <div class="zeile">
+          <i class="k-punkt f${x.farbe}" style="margin:0 4px"></i>
+          <div class="inhalt"><div class="haupt">${schuetzen(x.reisender)}</div>
+            <div class="neben">${datumKurz(x.von)}${x.bis !== x.von ? " – " + datumKurz(x.bis) : ""} · ${tageZwischen(x)} ${tageZwischen(x) === 1 ? "Tag" : "Tage"}${x.gleis ? " · Gleis " + schuetzen(x.gleis) : ""}</div></div>
+        </div>`).join("") || `<div class="meta" style="text-align:center;padding:14px 0">In diesem Monat kein Treffen</div>`}</div>`;
+  };
+  b.el.addEventListener("click", e => {
+    const k = e.target.closest("[data-m]");
+    if (!k) return;
+    monat.setMonth(monat.getMonth() + Number(k.dataset.m));
+    zeichnen();
+  });
+  // Wischen zwischen Monaten
+  let startX = null;
+  b.el.addEventListener("touchstart", e => { startX = e.touches[0].clientX; }, { passive: true });
+  b.el.addEventListener("touchend", e => {
+    if (startX === null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    startX = null;
+    if (Math.abs(dx) > 60) { monat.setMonth(monat.getMonth() + (dx < 0 ? 1 : -1)); zeichnen(); }
+  });
+  zeichnen();
 }
 
 async function besuchLoeschen(id) {
