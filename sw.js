@@ -1,5 +1,5 @@
 /* Servus – Hintergrund-Helfer: Push-Nachrichten + Offline-Speicher */
-const VERSION = "servus-v3";
+const VERSION = "servus-v4";
 const APP_DATEIEN = ["./", "index.html", "bereiche.js", "manifest.json", "icon.png"];
 
 self.addEventListener("install", event => {
@@ -13,7 +13,7 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
-      .then(namen => Promise.all(namen.filter(n => n !== VERSION && n !== "servus-bilder").map(n => caches.delete(n))))
+      .then(namen => Promise.all(namen.filter(n => n !== VERSION && n !== "servus-bilder" && n !== "servus-poster").map(n => caches.delete(n))))
       .then(() => self.clients.claim())
   );
 });
@@ -42,6 +42,18 @@ async function erstSpeicher(request, cacheName) {
   return antwort;
 }
 
+// Poster-Zwischenspeicher klein halten: höchstens 150 Bilder (ca. 3–5 MB)
+let aufraeumenLaeuft = false;
+async function posterAufraeumen() {
+  if (aufraeumenLaeuft) return;
+  aufraeumenLaeuft = true;
+  try {
+    const cache = await caches.open("servus-poster");
+    const schluessel = await cache.keys();
+    for (const k of schluessel.slice(0, Math.max(0, schluessel.length - 150))) await cache.delete(k);
+  } finally { aufraeumenLaeuft = false; }
+}
+
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
@@ -52,7 +64,8 @@ self.addEventListener("fetch", event => {
   } else if (url.hostname === "cdn.jsdelivr.net") {
     event.respondWith(erstSpeicher(request, VERSION));
   } else if (url.pathname.includes("/storage/v1/object/")) {
-    event.respondWith(erstSpeicher(request, "servus-bilder"));
+    event.respondWith(erstSpeicher(request, "servus-bilder"));  } else if (url.hostname === "static.tvmaze.com" || url.hostname.endsWith(".mzstatic.com")) {
+    event.respondWith(erstSpeicher(request, "servus-poster").then(antwort => { posterAufraeumen(); return antwort; }));
   }
 });
 
