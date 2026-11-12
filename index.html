@@ -106,6 +106,13 @@
   /* Segmente & Chips */
   .segment { display: flex; background: var(--feld); border-radius: 12px; padding: 3px; gap: 2px; margin-bottom: 14px; }
   .segment button { flex: 1; border: none; background: none; color: var(--text2); padding: 8px 4px; border-radius: 10px; font-size: 14px; font-weight: 600; margin: 0; }
+  .poster { width: 54px; height: 80px; flex: 0 0 auto; object-fit: cover; border-radius: 8px; background: var(--feld); cursor: pointer; }
+  .poster.gross { display: block; width: 120px; height: 178px; margin: 6px auto 10px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.18); cursor: default; }
+  .poster-wahl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; max-height: 55vh; overflow-y: auto; }
+  .poster-wahl button { border: 2px solid transparent; background: none; padding: 0; margin: 0; border-radius: 10px; text-align: left; color: var(--text2); font-size: 11px; min-width: 0; }
+  .poster-wahl button.aktiv { border-color: var(--blau); }
+  .poster-wahl img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; display: block; background: var(--feld); }
+  .poster-wahl span { display: block; padding: 4px 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .suche { position: relative; margin-bottom: 14px; }
   .suche > i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 18px; pointer-events: none; }
   .suche input { margin: 0; padding-left: 38px; padding-right: 40px; -webkit-appearance: none; appearance: none; }
@@ -172,6 +179,7 @@
   .kommentar { font-size: 14px; margin: 4px 0; line-height: 1.4; overflow-wrap: anywhere; }
   .kommentar img { width: 55%; border-radius: 12px; margin-top: 4px; display: block; }
   .feed-post .eingabe-pille { margin: 10px 12px 12px; }
+  .feed-post .erwaehnung-wahl { margin: 8px 12px -4px; }
   .mehr-laden { margin: 4px 0 20px; }
 
   /* Overlays: Blatt, Vollbild, Hinweise */
@@ -185,6 +193,15 @@
   .blatt.mittig { border-radius: 22px; margin: 16px; }
   .blatt-hg.mitte { align-items: center; }
   .blatt.hoch { height: 80vh; display: flex; flex-direction: column; }
+  .vorschau-bild { width: 100%; max-height: 60vh; object-fit: contain; border-radius: 14px; display: block; background: var(--feld); }
+  .vorschau-bild.gespiegelt { transform: scaleX(-1); }
+  .knopf.zweit.an { background: var(--blau-hell); border-color: var(--blau); color: var(--blau-text); }
+  .erwaehnung { color: var(--blau-text); font-weight: 600; }
+  .erwaehnung-wahl { display: flex; gap: 8px; margin: 8px 0 -2px; }
+  .erwaehnung-wahl button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rand); background: var(--karte); color: var(--text);
+    border-radius: 20px; padding: 4px 12px 4px 4px; margin: 0; font-size: 14px; font-weight: 600; }
+  .erwaehnung-wahl .avatar { width: 26px; height: 26px; font-size: 12px; }
+  .essen-detail { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   @keyframes hochgleiten { from { transform: translateY(40px); opacity: .4; } }
   @keyframes einblenden { from { opacity: 0; } }
   .stern-wahl { display: flex; justify-content: center; gap: 6px; margin: 8px 0 14px; }
@@ -282,6 +299,45 @@ const speicher = {
   lesen(name, standard = null) { try { const w = localStorage.getItem(name); return w === null ? standard : JSON.parse(w); } catch (e) { return standard; } },
   schreiben(name, wert) { try { localStorage.setItem(name, JSON.stringify(wert)); } catch (e) {} }
 };
+
+// @Name in Kommentaren hervorheben
+function mitErwaehnungen(text) {
+  let html = schuetzen(text || "");
+  for (const p of leute) {
+    const name = schuetzen(p.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    html = html.replace(new RegExp("@" + name + "(?![\\p{L}\\d])", "giu"), m => `<span class="erwaehnung">${m}</span>`);
+  }
+  return html;
+}
+
+// Beim Tippen von „@“ den Namen zum Antippen vorschlagen
+document.addEventListener("input", e => {
+  const feld = e.target;
+  if (!feld.matches?.('#feed input[id^="k"], #essenKommentar')) return;
+  const pille = feld.closest(".eingabe-pille");
+  if (!pille) return;
+  let box = pille.previousElementSibling?.classList.contains("erwaehnung-wahl") ? pille.previousElementSibling : null;
+  const treffer = feld.value.slice(0, feld.selectionEnd ?? feld.value.length).match(/(^|\s)@([\p{L}]*)$/u);
+  const andere = treffer ? leute.filter(p => p.user_id !== ich?.id && p.name.toLowerCase().startsWith(treffer[2].toLowerCase())) : [];
+  if (!andere.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "erwaehnung-wahl";
+    pille.before(box);
+    box.addEventListener("pointerdown", ev => {
+      const k = ev.target.closest("[data-name]");
+      if (!k) return;
+      ev.preventDefault();
+      const ende = feld.selectionEnd ?? feld.value.length;
+      const vorher = feld.value.slice(0, ende).replace(/@[\p{L}]*$/u, "@" + k.dataset.name + " ");
+      feld.value = vorher + feld.value.slice(ende);
+      feld.setSelectionRange(vorher.length, vorher.length);
+      box.remove();
+      feld.focus();
+    });
+  }
+  box.innerHTML = andere.map(p => `<button type="button" data-name="${schuetzen(p.name)}">${avatar(p.user_id)} <span>@${schuetzen(p.name)}</span></button>`).join("");
+});
 
 function nameVon(id) { return (leute.find(p => p.user_id === id) || {}).name || "?"; }
 function andererId() { return (leute.find(p => p.user_id !== ich.id) || {}).user_id; }
@@ -427,7 +483,7 @@ function sterneWahl(titel, { untertitel = "", platzhalter = "Kurzer Kommentar (o
 }
 
 /* ---------- Bilder ---------- */
-function bildVerkleinern(datei, maxSeite = 1600, typ = "image/jpeg", qualitaet = 0.85) {
+function bildVerkleinern(datei, maxSeite = 1600, typ = "image/jpeg", qualitaet = 0.85, spiegeln = false) {
   return new Promise((ok, nein) => {
     const bild = new Image();
     bild.onload = () => {
@@ -435,7 +491,9 @@ function bildVerkleinern(datei, maxSeite = 1600, typ = "image/jpeg", qualitaet =
       const c = document.createElement("canvas");
       c.width = Math.round(bild.width * f);
       c.height = Math.round(bild.height * f);
-      c.getContext("2d").drawImage(bild, 0, 0, c.width, c.height);
+      const ctx = c.getContext("2d");
+      if (spiegeln) { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+      ctx.drawImage(bild, 0, 0, c.width, c.height);
       URL.revokeObjectURL(bild.src);
       c.toBlob(b => b ? ok(b) : nein(new Error("Bild konnte nicht umgewandelt werden")), typ, qualitaet);
     };
@@ -444,8 +502,8 @@ function bildVerkleinern(datei, maxSeite = 1600, typ = "image/jpeg", qualitaet =
   });
 }
 
-async function bildHochladen(datei, vorsilbe = "") {
-  const blob = await bildVerkleinern(datei, 1600);
+async function bildHochladen(datei, vorsilbe = "", spiegeln = false) {
+  const blob = await bildVerkleinern(datei, 1600, "image/jpeg", 0.85, spiegeln);
   const pfad = `${ich.id}/${vorsilbe}${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`;
   const { error } = await db.storage.from("medien").upload(pfad, blob, { contentType: "image/jpeg", cacheControl: "31536000" });
   if (error) throw error;
@@ -789,6 +847,68 @@ function videoDauer(datei) {
   });
 }
 
+// Liest aus den Foto-Daten, ob die Frontkamera benutzt wurde: true / false / null (unbekannt)
+async function istFrontkamera(datei) {
+  try {
+    const d = new DataView(await datei.slice(0, 256 * 1024).arrayBuffer());
+    if (d.getUint16(0) !== 0xFFD8) return null;
+    let o = 2;
+    while (o + 10 < d.byteLength) {
+      const marker = d.getUint16(o), laenge = d.getUint16(o + 2);
+      if ((marker & 0xFF00) !== 0xFF00) return null;
+      if (marker === 0xFFE1 && d.getUint32(o + 4) === 0x45786966) {
+        const t = o + 10, klein = d.getUint16(t) === 0x4949;
+        const u16 = p => d.getUint16(t + p, klein), u32 = p => d.getUint32(t + p, klein);
+        const suche = (ifd, tag) => { const n = u16(ifd); for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (u16(e) === tag) return e; } return null; };
+        const zeiger = suche(u32(4), 0x8769);
+        if (zeiger === null) return null;
+        const objektiv = suche(u32(zeiger + 8), 0xA434);
+        if (objektiv === null) return null;
+        const anzahl = u32(objektiv + 4), start = anzahl > 4 ? u32(objektiv + 8) : objektiv + 8;
+        let text = "";
+        for (let i = 0; i < anzahl && t + start + i < d.byteLength; i++) text += String.fromCharCode(d.getUint8(t + start + i));
+        return /front/i.test(text);
+      }
+      if (marker === 0xFFDA) return null;
+      o += 2 + laenge;
+    }
+  } catch {}
+  return null;
+}
+
+// Kamera-Foto: bei Frontkamera (oder unbekannt) erst Vorschau mit „Spiegeln“
+async function kameraFoto(dateien) {
+  const d = dateien[0];
+  if (dateien.length !== 1 || !d?.type.startsWith("image")) return hochladen(dateien);
+  const front = await istFrontkamera(d);
+  if (front === false) return hochladen(dateien);
+  let spiegeln = front ? speicher.lesen("frontSpiegeln", true) : false;
+  const url = URL.createObjectURL(d);
+  const b = blatt(`
+    <h3>Vorschau</h3>
+    <img class="vorschau-bild ${spiegeln ? "gespiegelt" : ""}" src="${url}" alt="">
+    <div class="reihe" style="margin-top:12px">
+      <button class="knopf zweit ${spiegeln ? "an" : ""}" data-a="spiegeln"><i class="ti ti-flip-vertical"></i> Spiegeln</button>
+      <button class="knopf" data-a="posten"><i class="ti ti-send"></i> Posten</button>
+    </div>`);
+  let gepostet = false;
+  b.hg.addEventListener("zu", () => { if (!gepostet) URL.revokeObjectURL(url); });
+  b.el.addEventListener("click", e => {
+    const k = e.target.closest("[data-a]");
+    if (!k) return;
+    if (k.dataset.a === "spiegeln") {
+      spiegeln = !spiegeln;
+      b.el.querySelector(".vorschau-bild").classList.toggle("gespiegelt", spiegeln);
+      k.classList.toggle("an", spiegeln);
+      return;
+    }
+    gepostet = true;
+    if (front) speicher.schreiben("frontSpiegeln", spiegeln);
+    b.zu();
+    hochladen(dateien, { spiegeln }).finally(() => URL.revokeObjectURL(url));
+  });
+}
+
 function postenAuswahl() {
   const b = blatt(`
     <h3>Was möchtest du posten?</h3>
@@ -806,13 +926,14 @@ function postenAuswahl() {
     if (k.dataset.a === "kamera") { f.accept = "image/*,video/*"; f.setAttribute("capture", "environment"); }
     else { f.accept = "image/*,video/*"; f.multiple = true; }
     document.body.appendChild(f);
-    f.onchange = () => { const dateien = [...f.files]; f.remove(); hochladen(dateien); };
+    const kamera = k.dataset.a === "kamera";
+    f.onchange = () => { const dateien = [...f.files]; f.remove(); kamera ? kameraFoto(dateien) : hochladen(dateien); };
     f.click();
     b.zu();
   });
 }
 
-async function hochladen(dateien) {
+async function hochladen(dateien, { spiegeln = false } = {}) {
   dateien = (dateien || []).filter(Boolean);
   if (!dateien.length) return;
   const video = dateien.find(d => d.type.startsWith("video"));
@@ -841,7 +962,7 @@ async function hochladen(dateien) {
       if (error) throw error;
       pfade.push(pfad);
     } else {
-      for (const d of dateien) pfade.push(await bildHochladen(d));
+      for (const d of dateien) pfade.push(await bildHochladen(d, "", spiegeln));
     }
     const { error } = await db.from("posts").insert({
       datei_pfad: pfade[0], weitere_pfade: pfade.slice(1), typ: video ? "video" : "foto", alarm_id: alarmId, zu_spaet: zuSpaet
@@ -905,7 +1026,7 @@ function feedZeichnen(posts, gibtMehr = false) {
       return `<button class="reaktion ${alle.some(r => r.user_id === ich.id) ? "meins" : ""}" onclick="reagieren(${p.id}, '${e}')">${e} ${alle.length}</button>`;
     }).join("");
     const kommentare = (p.kommentare || []).slice().sort((a, b) => new Date(a.erstellt_um) - new Date(b.erstellt_um))
-      .map(k => `<div class="kommentar"><b>${schuetzen(nameVon(k.user_id))}</b> ${k.gif_url ? `<img src="${schuetzen(k.gif_url)}" alt="">` : schuetzen(k.text)}</div>`).join("");
+      .map(k => `<div class="kommentar"><b>${schuetzen(nameVon(k.user_id))}</b> ${k.gif_url ? `<img src="${schuetzen(k.gif_url)}" alt="">` : mitErwaehnungen(k.text)}</div>`).join("");
 
     const div = document.createElement("div");
     div.className = "post feed-post";
@@ -1004,8 +1125,10 @@ document.addEventListener("click", async ev => {
    ========================================================= */
 let gifPost = null, gifArt = "gifs", gifBlatt = null, stickerBearbeiten = false;
 
-function gifSuchen(postId) {
+let gifZiel = null; // andere Stelle (z. B. Food Diary) bekommt das GIF statt eines Feed-Kommentars
+function gifSuchen(postId, ziel = null) {
   gifPost = postId;
+  gifZiel = ziel;
   gifBlatt = blatt(`
     <div class="eingabe-pille" style="margin-bottom:10px"><i class="ti ti-search" style="color:var(--text3)"></i>
       <input id="gifSuche" placeholder="Suchen …" style="padding-left:8px"></div>
@@ -1040,6 +1163,7 @@ async function gifLaden(suche) {
 
 async function kommentarMitBild(url) {
   gifBlatt?.zu();
+  if (gifZiel) { const ziel = gifZiel; gifZiel = null; return ziel(url); }
   if (await tun(db.from("kommentare").insert({ post_id: gifPost, text: "", gif_url: url }))) ladeFeed();
 }
 
