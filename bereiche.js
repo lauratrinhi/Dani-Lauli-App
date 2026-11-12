@@ -460,6 +460,51 @@ B.wuensche = {
 /* =========================================================
    ACTIVITY · Watchlist
    ========================================================= */
+/* ---- Poster: Serien über TVmaze, Filme (und Ersatz) über die iTunes-Suche. Gespeichert wird nur der Link. ---- */
+function jsonp(url, ms = 7000) {
+  return new Promise((ok, nein) => {
+    const name = "jp" + Date.now() + Math.floor(Math.random() * 1e6);
+    const skript = document.createElement("script");
+    const ende = () => { clearTimeout(uhr); delete window[name]; skript.remove(); };
+    const uhr = setTimeout(() => { ende(); nein(new Error("Zeit abgelaufen")); }, ms);
+    window[name] = d => { ende(); ok(d); };
+    skript.onerror = () => { ende(); nein(new Error("Laden fehlgeschlagen")); };
+    skript.src = url + "&callback=" + name;
+    document.head.appendChild(skript);
+  });
+}
+async function itunesSuche(url) {
+  try { const r = await fetch(url); if (r.ok) return await r.json(); } catch {}
+  return jsonp(url);
+}
+const sicherBild = u => typeof u === "string" && /^https:\/\//.test(u) ? u : null;
+async function posterSuchen(titel, art) {
+  const q = encodeURIComponent(titel.trim());
+  const ergebnisse = [];
+  let erreicht = false; // false = keine Verbindung → später nochmal versuchen
+  if (art === "serie") {
+    try {
+      const r = await fetch(`https://api.tvmaze.com/search/shows?q=${q}`);
+      if (r.ok) erreicht = true;
+      if (r.ok) for (const { show } of await r.json()) {
+        const bild = sicherBild(show?.image?.medium);
+        if (bild) ergebnisse.push({ bild, name: show.name, jahr: (show.premiered || "").slice(0, 4) });
+      }
+    } catch {}
+  }
+  try {
+    const film = art === "film";
+    const d = await itunesSuche(`https://itunes.apple.com/search?term=${q}&country=de&media=${film ? "movie" : "tvShow"}&entity=${film ? "movie" : "tvSeason"}&limit=8`);
+    if (d) erreicht = true;
+    for (const x of d?.results || []) {
+      const bild = sicherBild((x.artworkUrl100 || "").replace(/\/\d+x\d+bb\./, "/300x450bb."));
+      if (bild) ergebnisse.push({ bild, name: x.trackName || x.collectionName, jahr: (x.releaseDate || "").slice(0, 4) });
+    }
+  } catch {}
+  if (!erreicht) return null;
+  return ergebnisse.filter((e, i) => ergebnisse.findIndex(x => x.bild === e.bild) === i).slice(0, 9);
+}
+
 const PLATTFORMEN = ["Netflix", "Prime Video", "Disney+", "Apple TV+", "WOW", "Joyn", "RTL+", "YouTube", "Kino"];
 
 registriereSeite("watchlist", {
@@ -473,6 +518,7 @@ registriereSeite("watchlist", {
     }, daten => {
       if (!istAktuell("watchlist")) return;
       B.watch._daten = daten || { eintraege: [], bewertungen: [] };
+      setTimeout(() => B.watch.posterNachladen(), 300);
       B.watch.zeichnen(el);
     });
   }
@@ -513,8 +559,7 @@ B.watch = {
     if (e.status === "geplant") knoepfe = `<button class="knopf" onclick="B.watch.status(${e.id}, 'laeuft')"><i class="ti ti-player-play"></i> Anfangen</button>`;
     else if (e.status === "laeuft" && e.art === "serie") knoepfe = `
       <button class="knopf" onclick="B.watch.folge(${e.id})"><i class="ti ti-plus"></i> Folge</button>
-      <button class="knopf zweit" onclick="B.watch.staffel(${e.id})"><i class="ti ti-checks"></i> Staffel</button>
-      <button class="icon-knopf rund" onclick="B.watch.fertig(${e.id})" aria-label="Serie fertig"><i class="ti ti-flag-check"></i></button>`;
+      <button class="knopf zweit" onclick="B.watch.staffel(${e.id})"><i class="ti ti-checks"></i> Staffel</button>`;
     else if (e.status === "laeuft") knoepfe = `<button class="knopf" onclick="B.watch.fertig(${e.id})"><i class="ti ti-check"></i> Gesehen</button>`;
     else knoepfe = `<button class="knopf zweit" onclick="B.watch.status(${e.id}, 'laeuft')"><i class="ti ti-repeat"></i> Nochmal schauen</button>`;
     if (e.status !== "geplant") knoepfe += `<button class="icon-knopf rund" onclick="B.watch.bewerten(${e.id})" aria-label="Bewerten"><i class="ti ti-star"></i></button>`;
@@ -527,7 +572,7 @@ B.watch = {
 
     return `<div class="karte" id="watch-${e.id}">
       <div class="reihe" style="align-items:flex-start">
-        <i class="ti ti-${e.art === "film" ? "movie" : "device-tv"}" style="font-size:22px;color:var(--text2);margin-top:2px"></i>
+        ${sicherBild(e.poster) ? `<img class="poster" src="${schuetzen(e.poster)}" alt="" loading="lazy" onclick="B.watch.posterWahl(${e.id})" onerror="this.style.visibility='hidden'">` : `<i class="ti ti-${e.art === "film" ? "movie" : "device-tv"}" style="font-size:22px;color:var(--text2);margin-top:2px"></i>`}
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;font-size:17px">${schuetzen(e.titel)}</div>
           <div class="meta">${suche ? { laeuft: "Gerade", geplant: "Geplant", gesehen: "Gesehen" }[e.status] + " · " : ""}${e.plattform ? schuetzen(e.plattform) + " · " : ""}von ${schuetzen(nameVon(e.user_id))}${sterne ? " · " + sterne : ""}</div>
@@ -566,6 +611,7 @@ B.watch = {
     inhalt.innerHTML = wuerfelFeld("Heute schauen wir …");
     if (!await wuerfelDrehen(inhalt, liste.map(e => e.titel), wahl.titel, () => meine === runde && b.hg.isConnected)) return;
     inhalt.querySelector(".w-mehr").innerHTML = `
+      ${sicherBild(wahl.poster) ? `<img class="poster gross" src="${schuetzen(wahl.poster)}" alt="" onerror="this.remove()">` : ""}
       <div class="meta">${wahl.art === "film" ? "Film" : "Serie"}${wahl.plattform ? " · " + schuetzen(wahl.plattform) : ""} · von ${schuetzen(nameVon(wahl.user_id))}</div>
       ${wuerfelKnoepfe('<i class="ti ti-player-play"></i> Anfangen')}`;
     inhalt.querySelector('[data-a="nochmal"]').onclick = zeigen;
@@ -590,7 +636,47 @@ B.watch = {
   mehr(id) {
     const e = this.finden(id);
     if (!e) return;
-    mehrMenue(e.titel, [[() => this.bearbeiten(id), "pencil", "Bearbeiten"], [() => this.loeschen(id), "trash", "Löschen", true]]);
+    mehrMenue(e.titel, [
+      [() => this.bearbeiten(id), "pencil", "Bearbeiten"],
+      [() => this.posterWahl(id), "photo", sicherBild(e.poster) ? "Anderes Poster" : "Poster suchen"],
+      ...(e.status === "laeuft" && e.art === "serie" ? [[() => this.fertig(id), "flag-check", "Serie fertig geschaut"]] : []),
+      [() => this.loeschen(id), "trash", "Löschen", true]
+    ]);
+  },
+
+  _versucht: new Set(),
+  async posterNachladen() {
+    const offen = (this._daten.eintraege || []).filter(e => e.poster === null && !this._versucht.has(e.id)).slice(0, 6);
+    for (const e of offen) {
+      this._versucht.add(e.id);
+      const gefunden = await posterSuchen(e.titel, e.art);
+      if (!gefunden) return; // gerade keine Verbindung
+      const poster = gefunden[0]?.bild || "";
+      const { error } = await db.from("watchlist").update({ poster }).eq("id", e.id);
+      if (error) return;
+      e.poster = poster;
+      if (poster && istAktuell("watchlist")) this.suchen(this._suche);
+    }
+  },
+
+  async posterWahl(id) {
+    const e = this.finden(id);
+    if (!e) return;
+    const b = blatt(`<h3>Poster für ${schuetzen(e.titel)}</h3><div class="meta">Tippe auf das richtige Poster.</div>
+      <div class="poster-wahl"><div class="meta" style="grid-column:1/-1;text-align:center;padding:24px 0">Suche …</div></div>
+      <button class="knopf zweit" data-p="" style="width:100%;margin-top:12px"><i class="ti ti-photo-off"></i> Kein Poster</button>`);
+    b.el.addEventListener("click", async ev => {
+      const k = ev.target.closest("[data-p]");
+      if (!k) return;
+      b.zu();
+      if (await tun(db.from("watchlist").update({ poster: k.dataset.p }).eq("id", id))) { e.poster = k.dataset.p; seiteAktualisieren(); }
+    });
+    const liste = await posterSuchen(e.titel, e.art);
+    const raster = b.el.querySelector(".poster-wahl");
+    if (!raster) return;
+    if (!liste) { raster.innerHTML = `<div class="meta" style="grid-column:1/-1;text-align:center;padding:24px 0">Gerade keine Verbindung – versuch es gleich nochmal.</div>`; return; }
+    raster.innerHTML = liste.map(p => `<button data-p="${schuetzen(p.bild)}" class="${p.bild === e.poster ? "aktiv" : ""}"><img src="${schuetzen(p.bild)}" alt="" loading="lazy"><span>${schuetzen(p.name || "")}${p.jahr ? " · " + p.jahr : ""}</span></button>`).join("")
+      || `<div class="meta" style="grid-column:1/-1;text-align:center;padding:24px 0">Kein Poster gefunden. Probier es mit dem Originaltitel unter „Bearbeiten“.</div>`;
   },
 
   bearbeiten(id) {
@@ -603,7 +689,10 @@ B.watch = {
       absenden: async el => {
         const titel = wert(el, ".f-titel");
         if (!titel) { toast("Bitte einen Titel eintragen", "fehler"); return false; }
-        if (!await tun(db.from("watchlist").update({ titel, art: wert(el, ".f-art"), plattform: wert(el, ".f-wo") || null }).eq("id", id))) return false;
+        const art = wert(el, ".f-art");
+        const neu = { titel, art, plattform: wert(el, ".f-wo") || null };
+        if (titel !== e.titel || art !== e.art) { neu.poster = null; this._versucht.delete(id); }
+        if (!await tun(db.from("watchlist").update(neu).eq("id", id))) return false;
         seiteAktualisieren();
         return true;
       }
@@ -1248,11 +1337,15 @@ B.koch = {
 registriereSeite("essen", {
   render(el) {
     zeigeMitCache("essen", async () => {
-      const liste = await hol(db.from("essen").select("*").gte("erstellt_um", new Date(Date.now() - 7 * 864e5).toISOString()).order("erstellt_um", { ascending: false }));
+      const ab = new Date(Date.now() - 7 * 864e5).toISOString();
+      let { data: liste, error } = await db.from("essen").select("*, essen_reaktionen(*), essen_kommentare(*)").gte("erstellt_um", ab).order("erstellt_um", { ascending: false });
+      if (error) liste = await hol(db.from("essen").select("*").gte("erstellt_um", ab).order("erstellt_um", { ascending: false })); // falls die neuen Tabellen noch fehlen
       await bildUrlsHolen(liste.map(x => x.datei_pfad));
       return liste;
     }, daten => {
       if (!istAktuell("essen")) return;
+      B.essen._daten = daten || [];
+      B.essen.detailZeichnen();
       const nachTag = {};
       (daten || []).forEach(x => { const t = new Date(x.erstellt_um).toLocaleDateString("sv-SE"); (nachTag[t] = nachTag[t] || []).push(x); });
       const heute = new Date().toLocaleDateString("sv-SE");
@@ -1269,16 +1362,146 @@ registriereSeite("essen", {
         ${Object.entries(nachTag).map(([t, eintraege]) => `
           <div class="abschnitt">${tagName(t)}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">${eintraege.map(x => `
-            <div class="karte" style="padding:0;overflow:hidden;margin:0">
-              ${bildTag(x.datei_pfad, 'style="width:100%;aspect-ratio:1;object-fit:cover;display:block"')}
+            <div class="karte essen-kachel" style="padding:0;overflow:hidden;margin:0;cursor:pointer" onclick="B.essen.oeffnen(${x.id})">
+              ${bildTag(x.datei_pfad, 'style="width:100%;aspect-ratio:1;object-fit:cover;display:block" onclick=""')}
               <div style="padding:8px 10px"><div style="font-size:13px;font-weight:600">${schuetzen(nameVon(x.user_id))} <span class="meta">${new Date(x.erstellt_um).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span></div>
-              ${x.notiz ? `<div class="meta" style="margin:2px 0 0">${schuetzen(x.notiz)}</div>` : ""}</div>
+              ${x.notiz ? `<div class="meta" style="margin:2px 0 0">${schuetzen(x.notiz)}</div>` : ""}
+              ${B.essen.kurzinfo(x)}</div>
             </div>`).join("")}</div>`).join("") || leer("Noch kein Essen diese Woche", "tools-kitchen-2")}`);
     });
   }
 });
 
 B.essen = {
+  _daten: [],
+  _offen: null, // { id, b } – geöffnetes Foto
+
+  kurzinfo(x) {
+    const r = x.essen_reaktionen || [], k = x.essen_kommentare || [];
+    if (!r.length && !k.length) return "";
+    return `<div class="meta" style="margin-top:4px;display:flex;gap:8px">${r.length ? `<span>${[...new Set(r.map(e => e.emoji))].slice(0, 3).join("")} ${r.length}</span>` : ""}${k.length ? `<span><i class="ti ti-message-circle"></i> ${k.length}</span>` : ""}</div>`;
+  },
+
+  oeffnen(id) {
+    const b = blatt(`<div class="essen-detail"></div>`, { klasse: "hoch" });
+    this._offen = { id, b };
+    b.hg.addEventListener("zu", () => { if (this._offen?.b === b) this._offen = null; });
+    this.detailZeichnen();
+  },
+
+  detailZeichnen() {
+    const o = this._offen;
+    if (!o || !o.b.hg.isConnected) return;
+    const x = this._daten.find(e => e.id === o.id);
+    const box = o.b.el.querySelector(".essen-detail");
+    if (!x) { o.b.zu(); return; }
+    const reaktionen = x.essen_reaktionen || [];
+    const herzVonMir = reaktionen.some(r => r.emoji === "❤️" && r.user_id === ich.id);
+    const chips = [...new Set(reaktionen.map(r => r.emoji))].map(e => {
+      const alle = reaktionen.filter(r => r.emoji === e);
+      return `<button class="reaktion ${alle.some(r => r.user_id === ich.id) ? "meins" : ""}" data-emoji="${e}">${e} ${alle.length}</button>`;
+    }).join("");
+    const kommentare = (x.essen_kommentare || []).slice().sort((a, b) => new Date(a.erstellt_um) - new Date(b.erstellt_um))
+      .map(k => `<div class="kommentar"><b>${schuetzen(nameVon(k.user_id))}</b> ${sicherBild(k.gif_url) ? `<img src="${schuetzen(k.gif_url)}" alt="">` : mitErwaehnungen(k.text)}</div>`).join("");
+    const entwurf = box.querySelector("#essenKommentar")?.value || "";
+    const fokus = document.activeElement?.id === "essenKommentar";
+    const emojisOffen = box.querySelector(".emoji-wahl:not(.versteckt)") !== null;
+    const zeit = new Date(x.erstellt_um);
+    box.innerHTML = `
+      <div style="flex:1;overflow-y:auto;margin:0 -4px;padding:0 4px">
+        <div style="position:relative">${bildTag(x.datei_pfad, 'class="essen-gross" style="width:100%;max-height:40vh;object-fit:cover;border-radius:14px;display:block"')}</div>
+        <div class="reihe" style="margin:10px 0 2px;gap:8px">${avatar(x.user_id)}<div style="flex:1"><b>${schuetzen(nameVon(x.user_id))}</b>
+          <div class="meta">${zeit.toLocaleDateString("de-DE", { weekday: "long" })}, ${zeit.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr</div></div></div>
+        ${x.notiz ? `<div style="margin:6px 0 2px">${schuetzen(x.notiz)}</div>` : ""}
+        <div class="aktionen" style="padding:4px 0 0;margin-left:-6px">
+          <button class="icon-knopf ${herzVonMir ? "rot" : ""}" data-emoji="❤️" aria-label="Gefällt mir"><i class="ti ti-heart"></i></button>
+          <button class="icon-knopf" data-tun="emojis" aria-label="Reagieren"><i class="ti ti-mood-smile"></i></button>
+          <div class="reaktionen">${chips}</div>
+        </div>
+        <div class="emoji-wahl ${emojisOffen ? "" : "versteckt"}" style="padding:6px 0 0">
+          ${EMOJIS.map(e => `<button data-emoji="${e}">${e}</button>`).join("")}
+          <button data-tun="eigenes" aria-label="Anderes Emoji"><i class="ti ti-plus" style="font-size:18px"></i></button>
+        </div>
+        ${kommentare ? `<div class="kommentare" style="padding:8px 0 0">${kommentare}</div>` : ""}
+      </div>
+      <div class="eingabe-pille" style="margin-top:10px">
+        <input id="essenKommentar" placeholder="Kommentieren …" enterkeyhint="send" value="${schuetzen(entwurf)}">
+        <button class="icon-knopf" data-tun="gif" aria-label="GIF oder Sticker"><i class="ti ti-gif"></i></button>
+        <button class="icon-knopf blau" data-tun="senden" aria-label="Senden"><i class="ti ti-send"></i></button>
+      </div>`;
+    if (fokus) box.querySelector("#essenKommentar").focus();
+    if (box.dataset.bereit) return;
+    box.dataset.bereit = "1";
+    box.addEventListener("click", ev => {
+      const t = ev.target.closest("[data-emoji], [data-tun], img.essen-gross");
+      if (!t) return;
+      const id = this._offen?.id;
+      if (t.matches("img.essen-gross")) return this.bildTipp(t, id);
+      if (t.dataset.emoji) return this.reagieren(id, t.dataset.emoji);
+      const a = t.dataset.tun;
+      if (a === "emojis") box.querySelector(".emoji-wahl").classList.toggle("versteckt");
+      else if (a === "eigenes") this.eigenesEmoji(id);
+      else if (a === "gif") gifSuchen(null, url => this.kommentieren(id, "", url));
+      else if (a === "senden") this.kommentieren(id, box.querySelector("#essenKommentar").value.trim());
+    });
+    box.addEventListener("keydown", ev => {
+      if (ev.target.id === "essenKommentar" && ev.key === "Enter") { ev.preventDefault(); this.kommentieren(this._offen?.id, ev.target.value.trim()); }
+    });
+  },
+
+  _tipp: { zeit: 0, timer: null },
+  bildTipp(bild, id) {
+    const jetzt = Date.now();
+    clearTimeout(this._tipp.timer);
+    if (jetzt - this._tipp.zeit < 300) {
+      this._tipp.zeit = 0;
+      const herz = document.createElement("div");
+      herz.className = "herz-pop";
+      herz.innerHTML = '<i class="ti ti-heart"></i>';
+      bild.parentElement.appendChild(herz);
+      setTimeout(() => herz.remove(), 900);
+      const x = this._daten.find(e => e.id === id);
+      if (!(x?.essen_reaktionen || []).some(r => r.emoji === "❤️" && r.user_id === ich.id)) this.reagieren(id, "❤️");
+      return;
+    }
+    this._tipp = { zeit: jetzt, timer: setTimeout(() => {
+      $("vollbild").querySelector("img").src = bild.src;
+      $("vollbild").style.display = "flex";
+    }, 300) };
+  },
+
+  async neuLaden(id) {
+    const { data } = await db.from("essen").select("*, essen_reaktionen(*), essen_kommentare(*)").eq("id", id).maybeSingle();
+    if (data) {
+      const i = this._daten.findIndex(e => e.id === id);
+      if (i >= 0) this._daten[i] = data;
+    }
+    this.detailZeichnen();
+    if (istAktuell("essen")) seiteAktualisieren();
+  },
+
+  async reagieren(id, emoji) {
+    const { error } = await db.from("essen_reaktionen").insert({ essen_id: id, emoji });
+    if (error && !istOffline(error)) await db.from("essen_reaktionen").delete().match({ essen_id: id, emoji, user_id: ich.id });
+    else if (error) return fehler(error);
+    this.neuLaden(id);
+  },
+
+  async eigenesEmoji(id) {
+    const e = await eingabe("Welches Emoji?", { platzhalter: "Tipp ein Emoji ein", ok: "Reagieren" });
+    if (!e) return;
+    if (e.length > 12 || /[<>"'`\\]/.test(e) || !/\p{Extended_Pictographic}/u.test(e)) return toast("Bitte nur ein Emoji eingeben.", "fehler");
+    this.reagieren(id, e);
+  },
+
+  async kommentieren(id, text, gif_url = null) {
+    if (!text && !gif_url) return;
+    if (!await tun(db.from("essen_kommentare").insert({ essen_id: id, text: text || "", gif_url }))) return;
+    const feld = this._offen?.b.el.querySelector("#essenKommentar");
+    if (feld && !gif_url) feld.value = "";
+    this.neuLaden(id);
+  },
+
   async foto() {
     const [d] = await dateiWaehlen({ capture: "environment" });
     if (!d) return;
