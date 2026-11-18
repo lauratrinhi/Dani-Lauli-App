@@ -1,5 +1,5 @@
 /* Servus – Hintergrund-Helfer: Push-Nachrichten + Offline-Speicher */
-const VERSION = "servus-v4";
+const VERSION = "servus-v5";
 const APP_DATEIEN = ["./", "index.html", "bereiche.js", "manifest.json", "icon.png"];
 
 self.addEventListener("install", event => {
@@ -14,6 +14,7 @@ self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
       .then(namen => Promise.all(namen.filter(n => n !== VERSION && n !== "servus-bilder" && n !== "servus-poster").map(n => caches.delete(n))))
+      .then(videosAufraeumen)
       .then(() => self.clients.claim())
   );
 });
@@ -54,17 +55,27 @@ async function posterAufraeumen() {
   } finally { aufraeumenLaeuft = false; }
 }
 
+// Videos nie über den Speicher laden: iPhones holen Videos stückweise (Range) und
+// können sie sonst nicht abspielen. Früher gespeicherte Videos werden entfernt.
+const IST_VIDEO = /\.(mov|mp4|m4v|webm|3gp|avi)$/i;
+async function videosAufraeumen() {
+  const cache = await caches.open("servus-bilder");
+  for (const k of await cache.keys()) if (IST_VIDEO.test(new URL(k.url).pathname)) await cache.delete(k);
+}
+
 self.addEventListener("fetch", event => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (request.headers.has("range") || request.destination === "video" || IST_VIDEO.test(url.pathname)) return;
 
   if (url.origin === self.location.origin) {
     event.respondWith(erstNetz(request));
   } else if (url.hostname === "cdn.jsdelivr.net") {
     event.respondWith(erstSpeicher(request, VERSION));
   } else if (url.pathname.includes("/storage/v1/object/")) {
-    event.respondWith(erstSpeicher(request, "servus-bilder"));  } else if (url.hostname === "static.tvmaze.com" || url.hostname.endsWith(".mzstatic.com")) {
+    event.respondWith(erstSpeicher(request, "servus-bilder"));
+  } else if (url.hostname === "static.tvmaze.com" || url.hostname.endsWith(".mzstatic.com")) {
     event.respondWith(erstSpeicher(request, "servus-poster").then(antwort => { posterAufraeumen(); return antwort; }));
   }
 });
